@@ -101,6 +101,7 @@ def _capture_robots(source: Source, robots_url: str):
 
 def _request_with_safe_redirects(source: Source, url: str):
     current_url = url
+    redirected = False
     with httpx.Client(
         timeout=httpx.Timeout(20.0, connect=10.0),
         follow_redirects=False,
@@ -110,7 +111,7 @@ def _request_with_safe_redirects(source: Source, url: str):
         for _ in range(_MAX_REDIRECTS + 1):
             _assert_public_url(current_url)
             if not _same_domain(source, current_url):
-                raise FetchBlocked("url is outside source domain")
+                raise FetchBlocked("redirected outside source domain" if redirected else "url is outside source domain")
 
             response = client.stream("GET", current_url)
             response.__enter__()
@@ -122,6 +123,7 @@ def _request_with_safe_redirects(source: Source, url: str):
             if not location:
                 return response, current_url
             current_url = urljoin(current_url, location)
+            redirected = True
 
     raise FetchBlocked("too many redirects")
 
