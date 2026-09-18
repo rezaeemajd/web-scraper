@@ -181,3 +181,54 @@ def test_review_transition_rejects_invalid_repeat_transition():
 
     with pytest.raises(ValueError, match="invalid transition"):
         transition_review_task(task_id=task.pk, status=ReviewTask.Status.APPROVED)
+
+@pytest.mark.django_db
+def test_dedup_resolve_merge_archives_loser_and_audits():
+    from django.contrib.auth import get_user_model
+    from .dedup_review import resolve_dedup_candidate
+    from .models import AuditEvent, DedupCandidate
+
+    entity = EntityType.objects.create(name="پزشک", slug="doctor-dedup")
+    left = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/a", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="c" * 64)
+    right = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/b", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="d" * 64)
+    candidate = DedupCandidate.objects.create(record_a=left, record_b=right, similarity="0.9000", matched_fields=["name"])
+    user = get_user_model().objects.create_user(username="dedup-reviewer")
+
+    resolve_dedup_candidate(candidate_id=candidate.pk, status=DedupCandidate.Status.MERGED, winner_id=left.pk, actor=user)
+
+    candidate.refresh_from_db(); left.refresh_from_db(); right.refresh_from_db()
+    event = AuditEvent.objects.get(action="dedup.resolve", object_id=str(candidate.pk))
+    assert candidate.status == DedupCandidate.Status.MERGED
+    assert left.status == ExtractedRecord.Status.RAW
+    assert right.status == ExtractedRecord.Status.ARCHIVED
+    assert event.metadata["winner_id"] == left.pk
+
+
+@pytest.mark.django_db
+def test_dedup_resolve_reject_does_not_archive_records():
+    from .dedup_review import resolve_dedup_candidate
+    from .models import DedupCandidate
+
+    entity = EntityType.objects.create(name="دارو", slug="drug-dedup")
+    left = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/a", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="e" * 64)
+    right = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/b", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="f" * 64)
+    candidate = DedupCandidate.objects.create(record_a=left, record_b=right, similarity="0.8000")
+
+    resolve_dedup_candidate(candidate_id=candidate.pk, status=DedupCandidate.Status.REJECTED)
+
+    left.refresh_from_db(); right.refresh_from_db()
+    assert left.status == ExtractedRecord.Status.RAW
+    assert right.status == ExtractedRecord.Status.RAW
+
+
+@pytest.mark.django_db
+def test_dedup_api_is_read_only_for_anonymous_users():
+    from rest_framework.test import APIClient
+    from .models import DedupCandidate
+
+    entity = EntityType.objects.create(name="کلینیک", slug="clinic-dedup-api")
+    left = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/a", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="1" * 64)
+    right = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/b", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="2" * 64)
+    candidate = DedupCandidate.objects.create(record_a=left, record_b=right, similarity="0.8000")
+    response = APIClient().post(f"/api/v1/duplicates/{candidate.pk}/resolve/", {"status":"rejected"}, format="json")
+    assert response.status_code == 403
