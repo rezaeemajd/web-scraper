@@ -2,6 +2,7 @@ import hashlib
 import ipaddress
 import socket
 import urllib.robotparser
+import json
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -16,6 +17,7 @@ class FetchBlocked(Exception):
 
 
 _MAX_REDIRECTS = 5
+_ROBOTS_CACHE_TTL = 10 * 60
 
 
 def _same_domain(source: Source, url: str) -> bool:
@@ -80,6 +82,14 @@ def _rate_limit(source: Source) -> None:
 
 def _capture_robots(source: Source, robots_url: str):
     rp = urllib.robotparser.RobotFileParser()
+    cache_key = f"cdi:robots:{source.pk}:{hashlib.sha256(source.user_agent.encode()).hexdigest()}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        try:
+            rp.parse(json.loads(cached))
+            return rp
+        except (TypeError, ValueError):
+            cache.delete(cache_key)
     try:
         _assert_public_url(robots_url)
         with httpx.Client(
@@ -93,11 +103,16 @@ def _capture_robots(source: Source, robots_url: str):
                     robots_text = _bounded_response_text(
                         rr, min(source.max_response_bytes, 256 * 1024)
                     )
-                    rp.parse(robots_text.splitlines())
+                    lines = robots_text.splitlines()
+                    rp.parse(lines)
+                    cache.set(
+                        cache_key,
+                        json.dumps(lines, ensure_ascii=False),
+                        _ROBOTS_CACHE_TTL,
+                    )
     except Exception:
         pass
     return rp
-
 
 def _request_with_safe_redirects(source: Source, url: str):
     current_url = url
