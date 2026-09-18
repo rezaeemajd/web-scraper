@@ -8,8 +8,8 @@ class Migration(migrations.Migration):
     operations=[
         migrations.AddField(model_name="entitytype",name="description",field=models.TextField(blank=True)),
         migrations.AddField(model_name="entitytype",name="active",field=models.BooleanField(default=True)),
-        migrations.AddField(model_name="entitytype",name="created_at",field=models.DateTimeField(auto_now_add=True,null=True)),
-        migrations.AddField(model_name="entitytype",name="updated_at",field=models.DateTimeField(auto_now=True,null=True)),
+        migrations.AddField(model_name="entitytype",name="created_at",field=models.DateTimeField(auto_now_add=True)),
+        migrations.AddField(model_name="entitytype",name="updated_at",field=models.DateTimeField(auto_now=True)),
         migrations.CreateModel(name="EntityField",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("name",models.CharField(max_length=100)),("slug",models.SlugField(max_length=100)),("data_type",models.CharField(choices=[("text","Text"),("integer","Integer"),("decimal","Decimal"),("boolean","Boolean"),("date","Date"),("url","URL"),("json","JSON")],default="text",max_length=20)),("required",models.BooleanField(default=False)),("searchable",models.BooleanField(default=True)),("normalizer",models.CharField(blank=True,max_length=100)),("validators_config",models.JSONField(blank=True,default=dict)),("position",models.PositiveIntegerField(default=0)),("entity_type",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="fields",to="datahub.entitytype"))],options={"ordering":["position","id"]}),
         migrations.AddField(model_name="location",name="parent",field=models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.PROTECT,related_name="children",to="datahub.location")),
         migrations.AddField(model_name="location",name="normalized_address",field=models.TextField(blank=True)),
