@@ -14,7 +14,9 @@ ALLOWED_TRANSITIONS = {
 
 @transaction.atomic
 def transition_review_task(*, task_id, status, actor=None, notes=None):
-    task = ReviewTask.objects.select_for_update().select_related("record").get(pk=task_id)
+    task = ReviewTask.objects.select_for_update().get(pk=task_id)
+    record = ExtractedRecord.objects.select_for_update().get(pk=task.record_id)
+
     if status not in ReviewTask.Status.values:
         raise ValueError("invalid review status")
     if status not in ALLOWED_TRANSITIONS.get(task.status, set()):
@@ -22,7 +24,7 @@ def transition_review_task(*, task_id, status, actor=None, notes=None):
 
     before = {
         "review_status": task.status,
-        "record_status": task.record.status,
+        "record_status": record.status,
         "notes": task.notes,
     }
     task.status = status
@@ -35,12 +37,12 @@ def transition_review_task(*, task_id, status, actor=None, notes=None):
         ReviewTask.Status.REJECTED: ExtractedRecord.Status.REJECTED,
     }.get(status)
     if record_status:
-        task.record.status = record_status
-        task.record.save(update_fields=["status", "updated_at"])
+        record.status = record_status
+        record.save(update_fields=["status", "updated_at"])
 
     after = {
         "review_status": task.status,
-        "record_status": task.record.status,
+        "record_status": record.status,
         "notes": task.notes,
     }
     AuditEvent.objects.create(
