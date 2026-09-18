@@ -62,3 +62,21 @@ def test_canonical_url():
 
 def test_recursive_normalization():
     assert normalize_value({"x": [" ي ", {"y": "ك"}]}) == {"x": ["ی", {"y": "ک"}]}
+
+@pytest.mark.django_db
+def test_fingerprint_is_stable_across_persian_character_variants():
+    from .pipeline import fingerprint
+
+    first = fingerprint({"name": "كالا  ي", "city": "تهران"})
+    second = fingerprint({"city": "تهران", "name": "کالا ی"})
+    assert first == second
+
+
+def test_similarity_is_symmetric_and_ignores_empty_matches():
+    from .dedup import similarity
+    from decimal import Decimal
+
+    score_ab, fields_ab = similarity({"name": "کالا", "phone": ""}, {"name": "کالا", "phone": "1"})
+    score_ba, fields_ba = similarity({"name": "کالا", "phone": "1"}, {"name": "کالا", "phone": ""})
+    assert score_ab == score_ba == Decimal("0.5000")
+    assert fields_ab == fields_ba == ["name"]
