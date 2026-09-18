@@ -53,7 +53,7 @@ def test_dedup_candidate_is_created_for_high_similarity():
     assert len(candidates) == 1
     assert candidates[0].record_a_id == left.pk
     assert candidates[0].record_b_id == right.pk
-    assert candidates[0].matched_fields == ["city", "name"] or set(candidates[0].matched_fields) == {"city", "name"}
+    assert set(candidates[0].matched_fields) == {"city", "name"}
 
 
 def test_canonical_url():
