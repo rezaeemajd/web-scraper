@@ -9,6 +9,11 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta: model=Location; fields="__all__"
 class RawCaptureSerializer(serializers.ModelSerializer):
     class Meta: model=RawCapture; fields="__all__"
+
+class RawCaptureListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RawCapture
+        exclude = ["body", "headers"]
 class ExtractedRecordSerializer(serializers.ModelSerializer):
     class Meta: model=ExtractedRecord; fields="__all__"; read_only_fields=["normalized_payload","fingerprint","quality_score","validation_errors","status","collected_at","updated_at"]
 
