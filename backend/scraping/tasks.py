@@ -6,7 +6,7 @@ from django.db import transaction
 from django.conf import settings
 from django.utils import timezone
 
-from .engine import execute
+from .engine import execute_many
 from .models import Scraper, ScraperRun
 
 
@@ -76,9 +76,14 @@ def run_scraper(self, scraper_id):
                 started_at=timezone.now(),
             )
         try:
-            record, capture = execute(locked_scraper)
-            run.pages_fetched = 1
-            run.records_extracted = 1 if record else 0
+            records, captures = execute_many(locked_scraper)
+            run.pages_fetched = sum(
+                1 for item in captures if item.status == item.Status.SUCCESS
+            )
+            run.records_extracted = len(records)
+            capture = captures[-1] if captures else None
+            if capture is None:
+                raise RuntimeError("scraper produced no capture")
             run.status = (
                 ScraperRun.Status.SUCCESS
                 if capture.status == capture.Status.SUCCESS
