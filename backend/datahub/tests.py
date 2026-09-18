@@ -112,3 +112,35 @@ def test_raw_capture_api_is_read_only_for_anonymous_users():
     delete_response = client.delete(f"/api/v1/raw/{capture.pk}/")
     assert delete_response.status_code == 403
     assert RawCapture.objects.filter(pk=capture.pk).exists()
+
+@pytest.mark.django_db
+def test_review_api_is_read_only_for_anonymous_users():
+    from rest_framework.test import APIClient
+    from .models import ReviewTask
+
+    entity = EntityType.objects.create(name="پزشک", slug="doctor")
+    record = process_record(entity_type=entity, url="https://example.com/doctor", payload={})
+    client = APIClient()
+
+    response = client.get("/api/v1/reviews/")
+    assert response.status_code == 200
+
+    post_response = client.post("/api/v1/reviews/", {"record": record.pk, "reason": "test"}, format="json")
+    assert post_response.status_code == 403
+    assert not ReviewTask.objects.filter(record=record).exists()
+
+
+@pytest.mark.django_db
+def test_audit_api_is_read_only_for_anonymous_users():
+    from rest_framework.test import APIClient
+    from .models import AuditEvent
+
+    event = AuditEvent.objects.create(action="test", entity="ExtractedRecord", object_id="1")
+    client = APIClient()
+
+    response = client.get(f"/api/v1/audit/{event.pk}/")
+    assert response.status_code == 200
+
+    post_response = client.post("/api/v1/audit/", {"action": "forged"}, format="json")
+    assert post_response.status_code == 403
+    assert not AuditEvent.objects.filter(action="forged").exists()
