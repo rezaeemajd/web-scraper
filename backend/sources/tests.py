@@ -1,7 +1,86 @@
+import pytest
+
+from datahub.models import RawCapture
+from . import fetcher
 from .fetcher import _same_domain
+from .models import Source
 
 
 def test_same_domain_rejects_external_host():
     source = type("SourceStub", (), {"base_url": "https://example.com"})()
     assert _same_domain(source, "https://example.com/path")
     assert not _same_domain(source, "https://evil.example/path")
+
+
+class _FakeResponse:
+    def __init__(self, url, body=b"hello", status_code=200, content_type="text/html"):
+        self.url = url
+        self.status_code = status_code
+        self.headers = {"content-type": content_type}
+        self.encoding = "utf-8"
+        self.is_success = 200 <= status_code < 300
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def iter_bytes(self):
+        yield self._body
+
+
+class _FakeClient:
+    response = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, url):
+        return self.response
+
+    def stream(self, method, url):
+        return self.response
+
+
+@pytest.mark.django_db
+def test_capture_url_persists_sha256_and_respects_response_limit(monkeypatch):
+    source = Source.objects.create(
+        name="Limited Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+        max_response_bytes=5,
+    )
+    _FakeClient.response = _FakeResponse(source.base_url + "/page", body=b"abcdefghij")
+    monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+
+    capture = fetcher.capture_url(source, "https://example.com/page")
+
+    assert capture.status == RawCapture.Status.SUCCESS
+    assert capture.body == "abcde"
+    assert capture.body_sha256 == __import__("hashlib").sha256(b"abcde").hexdigest()
+
+
+@pytest.mark.django_db
+def test_capture_url_blocks_external_redirect(monkeypatch):
+    source = Source.objects.create(
+        name="Redirect Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    _FakeClient.response = _FakeResponse("https://evil.example/landing", body=b"blocked")
+    monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+
+    capture = fetcher.capture_url(source, "https://example.com/page")
+
+    assert capture.status == RawCapture.Status.BLOCKED
+    assert capture.error_message == "redirected outside source domain"
