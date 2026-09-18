@@ -97,12 +97,12 @@ def test_dedup_candidate_refreshes_existing_score_and_fields():
     entity = EntityType.objects.create(name="دارو بروزرسانی", slug="drug-dedup-refresh")
     left = ExtractedRecord.objects.create(
         entity_type=entity, source_url="https://example.com/a",
-        source_domain="example.com", payload={}, normalized_payload={"name": "A"},
+        source_domain="example.com", payload={}, normalized_payload={"name": "A", "city": "X", "phone": "1"},
         fingerprint="a" * 64,
     )
     right = ExtractedRecord.objects.create(
         entity_type=entity, source_url="https://example.com/b",
-        source_domain="example.com", payload={}, normalized_payload={"name": "A", "city": "X"},
+        source_domain="example.com", payload={}, normalized_payload={"name": "A", "city": "X", "phone": "1", "email": "x@example.com"},
         fingerprint="b" * 64,
     )
     candidate = DedupCandidate.objects.create(
@@ -113,8 +113,8 @@ def test_dedup_candidate_refreshes_existing_score_and_fields():
     candidate.refresh_from_db()
 
     assert candidates == [candidate]
-    assert candidate.similarity == "0.5000"
-    assert candidate.matched_fields == ["name"]
+    assert candidate.similarity == "0.7500"
+    assert candidate.matched_fields == ["city", "name", "phone"]
 
 def test_similarity_is_symmetric_and_ignores_empty_matches():
     from .dedup import similarity
