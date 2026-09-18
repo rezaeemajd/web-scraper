@@ -90,3 +90,11 @@ CACHES = {
 }
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+
+# Conservative Celery defaults for the 2 GB deployment: one task is reserved
+# at a time so a slow scraper cannot starve the queue with prefetched work.
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1"))
+CELERY_RESULT_EXPIRES = int(os.getenv("CELERY_RESULT_EXPIRES", "86400"))
+CELERY_TASK_ROUTES = {
+    "scraping.tasks.run_scraper": {"queue": "scraping"},
+}
