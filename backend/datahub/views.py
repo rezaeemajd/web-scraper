@@ -2,6 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.permissions import StaffWritePermission
 from .dedup_review import resolve_dedup_candidate
 from .models import (
     AuditEvent,
@@ -29,18 +30,21 @@ from .serializers import (
 class EntityTypeViewSet(viewsets.ModelViewSet):
     queryset = EntityType.objects.prefetch_related("fields")
     serializer_class = EntityTypeSerializer
+    permission_classes = [StaffWritePermission]
     search_fields = ["name", "slug"]
 
 
 class EntityFieldViewSet(viewsets.ModelViewSet):
     queryset = EntityField.objects.select_related("entity_type")
     serializer_class = EntityFieldSerializer
+    permission_classes = [StaffWritePermission]
     filterset_fields = ["entity_type", "data_type", "required"]
 
 
 class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.all()
     serializer_class = LocationSerializer
+    permission_classes = [StaffWritePermission]
     search_fields = ["country", "province", "city", "district", "address"]
     filterset_fields = ["country", "province", "city", "district"]
 
@@ -48,6 +52,7 @@ class LocationViewSet(viewsets.ModelViewSet):
 class RawCaptureViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RawCapture.objects.all()
     serializer_class = RawCaptureSerializer
+    permission_classes = [StaffWritePermission]
     search_fields = ["url", "body_sha256"]
 
 
@@ -56,6 +61,7 @@ class ExtractedRecordViewSet(viewsets.ModelViewSet):
         "entity_type", "location", "raw_capture"
     )
     serializer_class = ExtractedRecordSerializer
+    permission_classes = [StaffWritePermission]
     search_fields = ["source_domain", "source_url", "status", "canonical_key"]
     filterset_fields = ["entity_type", "status", "source_domain"]
     ordering_fields = ["collected_at", "quality_score", "confidence"]
@@ -64,6 +70,7 @@ class ExtractedRecordViewSet(viewsets.ModelViewSet):
 class DedupCandidateViewSet(viewsets.ModelViewSet):
     queryset = DedupCandidate.objects.select_related("record_a", "record_b")
     serializer_class = DedupCandidateSerializer
+    permission_classes = [StaffWritePermission]
     filterset_fields = ["status"]
 
     @action(detail=True, methods=["post"], url_path="resolve")
@@ -90,6 +97,7 @@ class DedupCandidateViewSet(viewsets.ModelViewSet):
 class ReviewTaskViewSet(viewsets.ModelViewSet):
     queryset = ReviewTask.objects.select_related("record", "assigned_to")
     serializer_class = ReviewTaskSerializer
+    permission_classes = [StaffWritePermission]
     filterset_fields = ["status", "assigned_to"]
 
     @action(detail=True, methods=["post"], url_path="transition")
@@ -118,4 +126,5 @@ class ReviewTaskViewSet(viewsets.ModelViewSet):
 class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditEvent.objects.select_related("actor")
     serializer_class = AuditEventSerializer
+    permission_classes = [StaffWritePermission]
     filterset_fields = ["action", "entity", "object_id"]
