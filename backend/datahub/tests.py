@@ -298,3 +298,41 @@ def test_authenticated_users_cannot_mutate_workflow_status_directly():
     assert record_response.status_code == 400
     assert review_response.status_code == 400
     assert dedup_response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_dedup_blocks_candidates_using_searchable_fields():
+    entity = EntityType.objects.create(name="پزشک بلاک", slug="doctor-blocking")
+    EntityField.objects.create(
+        entity_type=entity, name="نام", slug="name", searchable=True
+    )
+    EntityField.objects.create(
+        entity_type=entity, name="تلفن", slug="phone", searchable=True
+    )
+    target = ExtractedRecord.objects.create(
+        entity_type=entity,
+        source_url="https://example.com/target",
+        source_domain="example.com",
+        payload={},
+        normalized_payload={"name": "A", "phone": "123"},
+        fingerprint="1" * 64,
+    )
+    match = ExtractedRecord.objects.create(
+        entity_type=entity,
+        source_url="https://example.com/match",
+        source_domain="example.com",
+        payload={},
+        normalized_payload={"name": "A", "phone": "123", "city": "X"},
+        fingerprint="2" * 64,
+    )
+    unrelated = ExtractedRecord.objects.create(
+        entity_type=entity,
+        source_url="https://example.com/unrelated",
+        source_domain="example.com",
+        payload={},
+        normalized_payload={"name": "Z", "phone": "999", "city": "Y"},
+        fingerprint="3" * 64,
+    )
+    candidates = find_candidates(target)
+    assert [item.record_b_id for item in candidates] == [match.pk]
+    assert unrelated.pk not in {item.record_a_id for item in candidates}
