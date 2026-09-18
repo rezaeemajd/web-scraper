@@ -1,4 +1,5 @@
 import hashlib
+import socket
 
 import pytest
 
@@ -28,6 +29,9 @@ class _FakeResponse:
 
     def __exit__(self, exc_type, exc, tb):
         return False
+
+    def close(self):
+        return None
 
     def iter_bytes(self):
         yield self._body
