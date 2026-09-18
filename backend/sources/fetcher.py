@@ -3,6 +3,7 @@ import urllib.robotparser
 from urllib.parse import urlsplit
 
 import httpx
+from django.core.cache import cache
 
 from datahub.models import RawCapture
 from .models import Source
@@ -34,6 +35,13 @@ def _bounded_response_text(response, max_bytes: int) -> str:
             break
     body = b"".join(chunks)
     return body.decode(response.encoding or "utf-8", errors="replace")
+
+
+def _rate_limit(source: Source) -> None:
+    interval = max(1, int(60 / max(source.rate_limit_per_minute, 1)))
+    key = f"cdi:source-rate:{source.pk}"
+    if not cache.add(key, "1", timeout=interval):
+        raise FetchBlocked("source rate limit exceeded")
 
 
 def capture_url(source: Source, url: str) -> RawCapture:
@@ -69,6 +77,7 @@ def capture_url(source: Source, url: str) -> RawCapture:
             )
 
     try:
+        _rate_limit(source)
         with httpx.Client(
             timeout=httpx.Timeout(20.0, connect=10.0),
             follow_redirects=True,
@@ -112,6 +121,8 @@ def capture_url(source: Source, url: str) -> RawCapture:
             body_sha256=hashlib.sha256(body).hexdigest(),
             status=RawCapture.Status.SUCCESS if response.is_success else RawCapture.Status.ERROR,
         )
+    except FetchBlocked:
+        raise
     except Exception as exc:
         return RawCapture.objects.create(
             url=url,
