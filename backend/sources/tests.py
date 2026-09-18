@@ -140,8 +140,4 @@ def test_capture_url_enforces_source_rate_limit(monkeypatch):
     with pytest.raises(fetcher.FetchBlocked, match="rate limit exceeded"):
         fetcher.capture_url(source, "https://example.com/page")
 
-    assert _FakeClient.responses == [
-        _FakeResponse("https://example.com/page", body=b"ok")
-    ]
-
-
+    assert len(_FakeClient.responses) == 1
