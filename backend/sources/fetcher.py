@@ -120,7 +120,7 @@ def _request_with_safe_redirects(source: Source, url: str):
             location = response.headers.get("location")
             response.close()
             if not location:
-                return client.stream("GET", current_url), current_url
+                return response, current_url
             current_url = urljoin(current_url, location)
 
     raise FetchBlocked("too many redirects")
