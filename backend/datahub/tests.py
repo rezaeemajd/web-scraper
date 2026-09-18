@@ -14,7 +14,7 @@ def test_pipeline_normalizes_and_scores_required_fields():
     assert record.validation_errors==[]
 
 def test_canonical_url():
-    assert canonical_url("HTTPS://Example.COM/a///?x=1")=="https://example.com/a///?x=1"
+    assert canonical_url("HTTPS://Example.COM/a///?x=1")=="https://example.com/a?x=1"
 
 def test_recursive_normalization():
     assert normalize_value({"x":[" ي ",{"y":"ك"}]})=={"x":["ی",{"y":"ک"}]}
