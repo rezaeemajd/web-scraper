@@ -13,7 +13,27 @@ class FetchBlocked(Exception):
 
 
 def _same_domain(source: Source, url: str) -> bool:
-    return (urlsplit(source.base_url).hostname or "").lower() == (urlsplit(url).hostname or "").lower()
+    return (urlsplit(source.base_url).hostname or "").lower() == (
+        urlsplit(url).hostname or ""
+    ).lower()
+
+
+def _bounded_response_text(response, max_bytes: int) -> str:
+    chunks = []
+    total = 0
+    for chunk in response.iter_bytes():
+        if not chunk:
+            continue
+        remaining = max_bytes - total
+        if remaining <= 0:
+            break
+        piece = chunk[:remaining]
+        chunks.append(piece)
+        total += len(piece)
+        if total >= max_bytes:
+            break
+    body = b"".join(chunks)
+    return body.decode(response.encoding or "utf-8", errors="replace")
 
 
 def capture_url(source: Source, url: str) -> RawCapture:
@@ -32,9 +52,10 @@ def capture_url(source: Source, url: str) -> RawCapture:
                 follow_redirects=True,
                 headers={"User-Agent": source.user_agent},
             ) as robots_client:
-                rr = robots_client.get(robots_url)
-            if rr.is_success:
-                rp.parse(rr.text.splitlines())
+                with robots_client.stream("GET", robots_url) as rr:
+                    if rr.is_success:
+                        robots_text = _bounded_response_text(rr, min(source.max_response_bytes, 256 * 1024))
+                        rp.parse(robots_text.splitlines())
         except Exception:
             pass
 
@@ -71,8 +92,9 @@ def capture_url(source: Source, url: str) -> RawCapture:
                     remaining = source.max_response_bytes - total
                     if remaining <= 0:
                         break
-                    chunks.append(chunk[:remaining])
-                    total += min(len(chunk), remaining)
+                    piece = chunk[:remaining]
+                    chunks.append(piece)
+                    total += len(piece)
                     if total >= source.max_response_bytes:
                         break
 
