@@ -19,6 +19,7 @@ jobs:
           DEBUG=False
           ALLOWED_HOSTS=localhost,127.0.0.1
           CORS_ALLOWED_ORIGINS=http://localhost:3001
+          CDI_NETWORK_NAME=cdi-ci-network
           POSTGRES_DB=cdi
           POSTGRES_USER=cdi
           POSTGRES_PASSWORD=ci-only-password
