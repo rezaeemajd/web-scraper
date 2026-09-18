@@ -82,7 +82,11 @@ def run_scraper(self, scraper_id):
             run.status = (
                 ScraperRun.Status.SUCCESS
                 if capture.status == capture.Status.SUCCESS
-                else ScraperRun.Status.FAILED
+                else (
+                    ScraperRun.Status.BLOCKED
+                    if capture.status == capture.Status.BLOCKED
+                    else ScraperRun.Status.FAILED
+                )
             )
             if run.status == ScraperRun.Status.FAILED:
                 run.error_message = capture.error_message
