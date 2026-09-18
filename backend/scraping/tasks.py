@@ -1,8 +1,43 @@
+import uuid
+
+import redis
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from .engine import execute
 from .models import Scraper, ScraperRun
+
+
+class DuplicateScraperRun(RuntimeError):
+    """Raised when a scraper already has an active task."""
+
+
+_LOCK_TTL_SECONDS = 2 * 60 * 60
+_RELEASE_LOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
+
+
+def _scraper_lock(scraper_id):
+    client = redis.Redis.from_url(settings.REDIS_URL)
+    key = f"cdi:scraper-run:{scraper_id}"
+    token = uuid.uuid4().hex
+    acquired = client.set(key, token, nx=True, ex=_LOCK_TTL_SECONDS)
+    if not acquired:
+        client.close()
+        raise DuplicateScraperRun("scraper already has an active run")
+    return client, key, token
+
+
+def _release_scraper_lock(client, key, token):
+    try:
+        client.eval(_RELEASE_LOCK_SCRIPT, 1, key, token)
+    finally:
+        client.close()
 
 
 @shared_task(bind=True)
@@ -13,40 +48,45 @@ def run_scraper(self, scraper_id):
     if not scraper.source.allowed or scraper.source.status != scraper.source.Status.ACTIVE:
         raise ValueError("source is not active")
 
-    run = ScraperRun.objects.create(
-        scraper=scraper,
-        status=ScraperRun.Status.RUNNING,
-        started_at=timezone.now(),
-    )
+    client, lock_key, lock_token = _scraper_lock(scraper_id)
+    run = None
     try:
-        record, capture = execute(scraper)
-        run.pages_fetched = 1
-        run.records_extracted = 1 if record else 0
-        run.status = (
-            ScraperRun.Status.SUCCESS
-            if capture.status == capture.Status.SUCCESS
-            else ScraperRun.Status.FAILED
+        run = ScraperRun.objects.create(
+            scraper=scraper,
+            status=ScraperRun.Status.RUNNING,
+            started_at=timezone.now(),
         )
-        if run.status == ScraperRun.Status.FAILED:
-            run.error_message = capture.error_message
-    except Exception as exc:
-        run.status = ScraperRun.Status.FAILED
-        run.error_message = str(exc)[:4000]
-        raise
+        try:
+            record, capture = execute(scraper)
+            run.pages_fetched = 1
+            run.records_extracted = 1 if record else 0
+            run.status = (
+                ScraperRun.Status.SUCCESS
+                if capture.status == capture.Status.SUCCESS
+                else ScraperRun.Status.FAILED
+            )
+            if run.status == ScraperRun.Status.FAILED:
+                run.error_message = capture.error_message
+        except Exception as exc:
+            run.status = ScraperRun.Status.FAILED
+            run.error_message = str(exc)[:4000]
+            raise
+        finally:
+            run.finished_at = timezone.now()
+            run.save(
+                update_fields=[
+                    "status",
+                    "started_at",
+                    "finished_at",
+                    "pages_fetched",
+                    "records_extracted",
+                    "error_message",
+                ]
+            )
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "records_extracted": run.records_extracted,
+        }
     finally:
-        run.finished_at = timezone.now()
-        run.save(
-            update_fields=[
-                "status",
-                "started_at",
-                "finished_at",
-                "pages_fetched",
-                "records_extracted",
-                "error_message",
-            ]
-        )
-    return {
-        "run_id": run.id,
-        "status": run.status,
-        "records_extracted": run.records_extracted,
-    }
+        _release_scraper_lock(client, lock_key, lock_token)
