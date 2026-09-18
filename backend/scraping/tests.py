@@ -215,3 +215,40 @@ def test_run_scraper_blocks_existing_active_run_even_without_redis_lock(
         status=ScraperRun.Status.RUNNING,
     ).count() == 1
     assert ScraperRun.objects.get(pk=existing.pk).finished_at is None
+
+
+@pytest.mark.django_db
+def test_run_scraper_records_blocked_capture_as_blocked(monkeypatch):
+    from datahub.models import RawCapture
+    from .tasks import run_scraper
+    from .models import ScraperRun
+
+    source = Source.objects.create(
+        name="Blocked Task Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="مرکز درمانی", slug="clinic-blocked")
+    scraper = Scraper.objects.create(
+        name="Blocked scraper",
+        source=source,
+        start_url="https://example.com/blocked",
+        entity_type=entity,
+    )
+    capture = RawCapture.objects.create(
+        url=scraper.start_url,
+        status=RawCapture.Status.BLOCKED,
+        error_message="robots.txt disallowed",
+    )
+    monkeypatch.setattr(
+        "scraping.tasks.execute",
+        lambda scraper: (None, capture),
+    )
+
+    result = run_scraper.run(scraper.pk)
+    run = ScraperRun.objects.get(pk=result["run_id"])
+
+    assert result["status"] == ScraperRun.Status.BLOCKED
+    assert run.status == ScraperRun.Status.BLOCKED
+    assert run.error_message == "robots.txt disallowed"
