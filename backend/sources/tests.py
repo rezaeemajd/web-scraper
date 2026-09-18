@@ -65,6 +65,7 @@ def test_capture_url_persists_sha256_and_respects_response_limit(monkeypatch):
     _FakeClient.responses = [_FakeResponse(source.base_url + "/page", body=b"abcdefghij")]
     _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher, "_assert_public_url", lambda url: None)
     monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
@@ -141,3 +142,43 @@ def test_capture_url_enforces_source_rate_limit(monkeypatch):
         fetcher.capture_url(source, "https://example.com/page")
 
     assert len(_FakeClient.responses) == 1
+
+
+def test_assert_public_url_blocks_private_and_accepts_public(monkeypatch):
+    from .fetcher import _assert_public_url, FetchBlocked
+
+    with pytest.raises(FetchBlocked, match="non-public"):
+        _assert_public_url("http://127.0.0.1:8000/")
+
+    monkeypatch.setattr(
+        fetcher.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))
+        ],
+    )
+    _assert_public_url("https://example.com/")
+
+def test_capture_url_blocks_private_redirect(monkeypatch):
+    source = Source.objects.create(
+        name="Private Redirect Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    _FakeClient.responses = [_FakeResponse(
+        "https://example.com/page",
+        body=b"",
+        status_code=302,
+    )]
+    _FakeClient.responses[0].headers["location"] = "http://127.0.0.1:8000/admin/"
+    _FakeClient.init_kwargs = []
+    monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
+    monkeypatch.setattr(fetcher, "_assert_public_url", lambda url: (
+        (_ for _ in ()).throw(fetcher.FetchBlocked("host resolves to a non-public address"))
+        if "127.0.0.1" in url else None
+    ))
+
+    with pytest.raises(fetcher.FetchBlocked, match="non-public"):
+        fetcher.capture_url(source, "https://example.com/page")
