@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="location",
             name="country",
-            field=models.CharField(db_index=True, default="ایران", max_length=100),
+            field=models.CharField(blank=True, db_index=True, default="ایران", max_length=100),
         ),
         migrations.AlterField(
             model_name="location",
