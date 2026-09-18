@@ -252,3 +252,45 @@ def test_run_scraper_records_blocked_capture_as_blocked(monkeypatch):
     assert result["status"] == ScraperRun.Status.BLOCKED
     assert run.status == ScraperRun.Status.BLOCKED
     assert run.error_message == "robots.txt disallowed"
+
+
+@pytest.mark.django_db
+def test_extract_static_html_rejects_invalid_config():
+    from .engine import ScraperConfigError, extract_static_html
+
+    source = Source.objects.create(
+        name="Config Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    scraper = Scraper.objects.create(
+        name="Invalid config",
+        source=source,
+        start_url="https://example.com",
+        extraction_config={"fields": {"name": "div["}},
+    )
+
+    with pytest.raises(ScraperConfigError, match="invalid CSS selector"):
+        extract_static_html(scraper, "<html><div>x</div></html>")
+
+
+@pytest.mark.django_db
+def test_extract_static_html_requires_fields():
+    from .engine import ScraperConfigError, extract_static_html
+
+    source = Source.objects.create(
+        name="Empty Config Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    scraper = Scraper.objects.create(
+        name="Empty config",
+        source=source,
+        start_url="https://example.com",
+        extraction_config={},
+    )
+
+    with pytest.raises(ScraperConfigError, match="fields"):
+        extract_static_html(scraper, "<html></html>")
