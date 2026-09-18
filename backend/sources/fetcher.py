@@ -119,9 +119,9 @@ def _request_with_safe_redirects(source: Source, url: str):
                 return response, current_url
 
             location = response.headers.get("location")
-            response.close()
             if not location:
                 return response, current_url
+            response.close()
             current_url = urljoin(current_url, location)
             redirected = True
 
