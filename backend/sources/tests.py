@@ -65,6 +65,7 @@ def test_capture_url_persists_sha256_and_respects_response_limit(monkeypatch):
     _FakeClient.responses = [_FakeResponse(source.base_url + "/page", body=b"abcdefghij")]
     _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
 
@@ -84,6 +85,7 @@ def test_capture_url_blocks_external_redirect(monkeypatch):
     _FakeClient.responses = [_FakeResponse("https://evil.example/landing", body=b"blocked")]
     _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
 
@@ -111,6 +113,7 @@ def test_capture_url_does_not_follow_external_robots_redirect(monkeypatch):
     ]
     _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
 
@@ -118,3 +121,27 @@ def test_capture_url_does_not_follow_external_robots_redirect(monkeypatch):
     assert capture.body == "<html>allowed</html>"
     assert _FakeClient.init_kwargs[0]["follow_redirects"] is False
     assert _FakeClient.init_kwargs[1]["follow_redirects"] is True
+
+
+@pytest.mark.django_db
+def test_capture_url_enforces_source_rate_limit(monkeypatch):
+    source = Source.objects.create(
+        name="Rate Limited Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+        rate_limit_per_minute=60,
+    )
+    _FakeClient.responses = [_FakeResponse("https://example.com/page", body=b"ok")]
+    _FakeClient.init_kwargs = []
+    monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: False)
+
+    with pytest.raises(fetcher.FetchBlocked, match="rate limit exceeded"):
+        fetcher.capture_url(source, "https://example.com/page")
+
+    assert _FakeClient.responses == [
+        _FakeResponse("https://example.com/page", body=b"ok")
+    ]
+
+
