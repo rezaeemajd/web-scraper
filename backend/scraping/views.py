@@ -6,12 +6,12 @@ from .serializers import ScraperSerializer, ScraperRunSerializer
 
 
 class ScraperViewSet(viewsets.ModelViewSet):
-    queryset = Scraper.objects.select_related("source")
+    queryset = Scraper.objects.select_related("source", "entity_type")
     serializer_class = ScraperSerializer
     permission_classes = [StaffWritePermission]
 
 
 class ScraperRunViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = ScraperRun.objects.select_related("scraper")
+    queryset = ScraperRun.objects.select_related("scraper", "scraper__source", "scraper__entity_type")
     serializer_class = ScraperRunSerializer
     permission_classes = [StaffWritePermission]
