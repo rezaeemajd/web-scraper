@@ -2,6 +2,7 @@ import uuid
 
 import redis
 from celery import shared_task
+from django.db import transaction
 from django.conf import settings
 from django.utils import timezone
 
@@ -36,6 +37,9 @@ def _scraper_lock(scraper_id):
 def _release_scraper_lock(client, key, token):
     try:
         client.eval(_RELEASE_LOCK_SCRIPT, 1, key, token)
+    except redis.RedisError:
+        # Lock expiry is the recovery mechanism; never mask the task result.
+        pass
     finally:
         client.close()
 
@@ -51,13 +55,28 @@ def run_scraper(self, scraper_id):
     client, lock_key, lock_token = _scraper_lock(scraper_id)
     run = None
     try:
-        run = ScraperRun.objects.create(
-            scraper=scraper,
-            status=ScraperRun.Status.RUNNING,
-            started_at=timezone.now(),
-        )
+        # Redis is the fast distributed guard. The row lock is the durable
+        # second line of defense if a long-running task outlives the Redis TTL.
+        with transaction.atomic():
+            locked_scraper = Scraper.objects.select_for_update().get(pk=scraper_id)
+            active_run = (
+                ScraperRun.objects
+                .filter(
+                    scraper=locked_scraper,
+                    status__in=(ScraperRun.Status.QUEUED, ScraperRun.Status.RUNNING),
+                )
+                .order_by("pk")
+                .first()
+            )
+            if active_run is not None:
+                raise DuplicateScraperRun("scraper already has an active run")
+            run = ScraperRun.objects.create(
+                scraper=locked_scraper,
+                status=ScraperRun.Status.RUNNING,
+                started_at=timezone.now(),
+            )
         try:
-            record, capture = execute(scraper)
+            record, capture = execute(locked_scraper)
             run.pages_fetched = 1
             run.records_extracted = 1 if record else 0
             run.status = (
