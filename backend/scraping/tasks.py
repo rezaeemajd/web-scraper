@@ -5,12 +5,7 @@ from .engine import execute
 from .models import Scraper, ScraperRun
 
 
-@shared_task(
-    bind=True,
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 3},
-)
+@shared_task(bind=True)
 def run_scraper(self, scraper_id):
     scraper = Scraper.objects.select_related("source", "entity_type").get(pk=scraper_id)
     if not scraper.active:
