@@ -191,21 +191,9 @@ def capture_url(source: Source, url: str) -> RawCapture:
         _rate_limit(source)
         response, final_url = _request_with_safe_redirects(source, url)
         try:
-            chunks = []
-            total = 0
-            for chunk in response.iter_bytes():
-                if not chunk:
-                    continue
-                remaining = source.max_response_bytes - total
-                if remaining <= 0:
-                    break
-                piece = chunk[:remaining]
-                chunks.append(piece)
-                total += len(piece)
-                if total >= source.max_response_bytes:
-                    break
-
-            body = b"".join(chunks)
+            # _request_with_safe_redirects already bounded and buffered the body.
+            # Reusing response.content avoids a second in-memory streaming pass.
+            body = response.content
             text = body.decode(response.encoding or "utf-8", errors="replace")
             return RawCapture.objects.create(
                 url=url,
