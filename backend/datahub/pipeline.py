@@ -23,8 +23,9 @@ def quality_score(payload,entity_type,errors):
     filled=sum(1 for f in fields if payload.get(f.slug) not in (None,"",[])); return Decimal(str(round(max(0.0,filled/len(fields)-min(0.5,len(errors)*0.1)),4)))
 def process_record(*,entity_type,url,payload,raw_capture=None,evidence=None,source_domain=None):
     normalized=normalize_value(payload)
-    errors=validate_payload(entity_type,normalized)
-    score=quality_score(normalized,entity_type,errors)
+    fields = list(entity_type.fields.all())
+    errors=validate_payload(entity_type,normalized,fields=fields)
+    score=quality_score(normalized,entity_type,errors,fields=fields)
     values={
         "raw_capture":raw_capture,
         "source_url":canonical_url(url),
