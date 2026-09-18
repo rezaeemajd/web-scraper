@@ -4,8 +4,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .models import Source
 from datahub.models import RawCapture
+from .models import Source
 
 
 class FetchBlocked(Exception):
@@ -49,12 +49,14 @@ def capture_url(source: Source, url: str) -> RawCapture:
         try:
             with httpx.Client(
                 timeout=httpx.Timeout(5.0, connect=3.0),
-                follow_redirects=True,
+                follow_redirects=False,
                 headers={"User-Agent": source.user_agent},
             ) as robots_client:
                 with robots_client.stream("GET", robots_url) as rr:
-                    if rr.is_success:
-                        robots_text = _bounded_response_text(rr, min(source.max_response_bytes, 256 * 1024))
+                    if rr.is_success and _same_domain(source, str(rr.url)):
+                        robots_text = _bounded_response_text(
+                            rr, min(source.max_response_bytes, 256 * 1024)
+                        )
                         rp.parse(robots_text.splitlines())
         except Exception:
             pass
