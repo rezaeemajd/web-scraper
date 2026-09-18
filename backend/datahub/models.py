@@ -1,3 +1,4 @@
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import Q
 class EntityType(models.Model):
@@ -16,7 +17,11 @@ class ExtractedRecord(models.Model):
     class Status(models.TextChoices): RAW="raw","Raw"; PARSED="parsed","Parsed"; REVIEW="needs_review","Needs Review"; APPROVED="approved","Approved"; REJECTED="rejected","Rejected"; ARCHIVED="archived","Archived"
     entity_type=models.ForeignKey(EntityType,on_delete=models.PROTECT,null=True,blank=True); location=models.ForeignKey(Location,on_delete=models.SET_NULL,null=True,blank=True); raw_capture=models.ForeignKey(RawCapture,on_delete=models.SET_NULL,null=True,blank=True,related_name="records"); source_url=models.URLField(max_length=2000); source_domain=models.CharField(max_length=255,db_index=True); payload=models.JSONField(default=dict); normalized_payload=models.JSONField(default=dict); evidence=models.JSONField(default=list,blank=True); status=models.CharField(max_length=20,choices=Status.choices,default="raw"); confidence=models.DecimalField(max_digits=5,decimal_places=4,default=0); quality_score=models.DecimalField(max_digits=5,decimal_places=4,default=0); canonical_key=models.CharField(max_length=255,db_index=True,blank=True); fingerprint=models.CharField(max_length=64,db_index=True,blank=True); validation_errors=models.JSONField(default=list,blank=True); collected_at=models.DateTimeField(auto_now_add=True); updated_at=models.DateTimeField(auto_now=True)
     class Meta:
-        indexes=[models.Index(fields=["entity_type","status"]),models.Index(fields=["source_domain","collected_at"])]
+        indexes=[
+            models.Index(fields=["entity_type","status"]),
+            models.Index(fields=["source_domain","collected_at"]),
+            GinIndex(fields=["normalized_payload"], name="record_norm_payload_gin"),
+        ]
         constraints=[models.UniqueConstraint(fields=["entity_type","fingerprint"],condition=~Q(fingerprint=""),name="uniq_entity_record_fingerprint")]
 class DedupCandidate(models.Model):
     class Status(models.TextChoices): OPEN="open","Open"; MERGED="merged","Merged"; REJECTED="rejected","Rejected"
