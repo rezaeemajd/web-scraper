@@ -90,6 +90,32 @@ def test_fingerprint_is_stable_across_persian_character_variants():
     assert first == second
 
 
+@pytest.mark.django_db
+def test_dedup_candidate_refreshes_existing_score_and_fields():
+    from .models import DedupCandidate
+
+    entity = EntityType.objects.create(name="دارو بروزرسانی", slug="drug-dedup-refresh")
+    left = ExtractedRecord.objects.create(
+        entity_type=entity, source_url="https://example.com/a",
+        source_domain="example.com", payload={}, normalized_payload={"name": "A"},
+        fingerprint="a" * 64,
+    )
+    right = ExtractedRecord.objects.create(
+        entity_type=entity, source_url="https://example.com/b",
+        source_domain="example.com", payload={}, normalized_payload={"name": "A", "city": "X"},
+        fingerprint="b" * 64,
+    )
+    candidate = DedupCandidate.objects.create(
+        record_a=left, record_b=right, similarity="0.7000", matched_fields=["old"]
+    )
+
+    candidates = find_candidates(right)
+    candidate.refresh_from_db()
+
+    assert candidates == [candidate]
+    assert candidate.similarity == "0.5000"
+    assert candidate.matched_fields == ["name"]
+
 def test_similarity_is_symmetric_and_ignores_empty_matches():
     from .dedup import similarity
     from decimal import Decimal
