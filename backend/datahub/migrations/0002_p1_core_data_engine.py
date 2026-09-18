@@ -1,0 +1,36 @@
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+from django.db.models import Q
+
+class Migration(migrations.Migration):
+    dependencies=[("datahub","0001_initial")]
+    operations=[
+        migrations.AddField(model_name="entitytype",name="description",field=models.TextField(blank=True)),
+        migrations.AddField(model_name="entitytype",name="active",field=models.BooleanField(default=True)),
+        migrations.AddField(model_name="entitytype",name="created_at",field=models.DateTimeField(auto_now_add=True)),
+        migrations.AddField(model_name="entitytype",name="updated_at",field=models.DateTimeField(auto_now=True)),
+        migrations.CreateModel(name="EntityField",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("name",models.CharField(max_length=100)),("slug",models.SlugField(max_length=100)),("data_type",models.CharField(choices=[("text","Text"),("integer","Integer"),("decimal","Decimal"),("boolean","Boolean"),("date","Date"),("url","URL"),("json","JSON")],default="text",max_length=20)),("required",models.BooleanField(default=False)),("searchable",models.BooleanField(default=True)),("normalizer",models.CharField(blank=True,max_length=100)),("validators_config",models.JSONField(blank=True,default=dict)),("position",models.PositiveIntegerField(default=0)),("entity_type",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="fields",to="datahub.entitytype"))],options={"ordering":["position","id"]}),
+        migrations.AddField(model_name="location",name="parent",field=models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.PROTECT,related_name="children",to="datahub.location")),
+        migrations.AddField(model_name="location",name="normalized_address",field=models.TextField(blank=True)),
+        migrations.AddField(model_name="location",name="latitude",field=models.DecimalField(blank=True,decimal_places=6,max_digits=9,null=True)),
+        migrations.AddField(model_name="location",name="longitude",field=models.DecimalField(blank=True,decimal_places=6,max_digits=9,null=True)),
+        migrations.AddField(model_name="location",name="created_at",field=models.DateTimeField(auto_now_add=True,null=True)),
+        migrations.AddField(model_name="location",name="updated_at",field=models.DateTimeField(auto_now=True,null=True)),
+        migrations.CreateModel(name="RawCapture",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("url",models.URLField(max_length=2000)),("status_code",models.PositiveSmallIntegerField(blank=True,null=True)),("content_type",models.CharField(blank=True,max_length=255)),("body",models.TextField(blank=True)),("headers",models.JSONField(blank=True,default=dict)),("body_sha256",models.CharField(blank=True,db_index=True,max_length=64)),("status",models.CharField(choices=[("success","Success"),("blocked","Blocked"),("error","Error")],default="success",max_length=20)),("error_message",models.TextField(blank=True)),("fetched_at",models.DateTimeField(auto_now_add=True))]),
+        migrations.AddField(model_name="extractedrecord",name="raw_capture",field=models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.SET_NULL,related_name="records",to="datahub.rawcapture")),
+        migrations.AddField(model_name="extractedrecord",name="normalized_payload",field=models.JSONField(default=dict)),
+        migrations.AddField(model_name="extractedrecord",name="evidence",field=models.JSONField(blank=True,default=list)),
+        migrations.AddField(model_name="extractedrecord",name="quality_score",field=models.DecimalField(decimal_places=4,default=0,max_digits=5)),
+        migrations.AddField(model_name="extractedrecord",name="canonical_key",field=models.CharField(blank=True,db_index=True,max_length=255)),
+        migrations.AddField(model_name="extractedrecord",name="fingerprint",field=models.CharField(blank=True,db_index=True,max_length=64)),
+        migrations.AddField(model_name="extractedrecord",name="validation_errors",field=models.JSONField(blank=True,default=list)),
+        migrations.CreateModel(name="DedupCandidate",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("similarity",models.DecimalField(decimal_places=4,max_digits=5)),("matched_fields",models.JSONField(blank=True,default=list)),("status",models.CharField(choices=[("open","Open"),("merged","Merged"),("rejected","Rejected")],default="open",max_length=20)),("created_at",models.DateTimeField(auto_now_add=True)),("record_a",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="dedup_left",to="datahub.extractedrecord")),("record_b",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="dedup_right",to="datahub.extractedrecord"))]),
+        migrations.CreateModel(name="ReviewTask",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("status",models.CharField(choices=[("open","Open"),("approved","Approved"),("rejected","Rejected"),("skipped","Skipped")],default="open",max_length=20)),("reason",models.CharField(blank=True,max_length=255)),("notes",models.TextField(blank=True)),("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("assigned_to",models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.SET_NULL,related_name="cdi_review_tasks",to=settings.AUTH_USER_MODEL)),("record",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="review_tasks",to="datahub.extractedrecord"))]),
+        migrations.CreateModel(name="AuditEvent",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("action",models.CharField(max_length=100)),("entity",models.CharField(max_length=100)),("object_id",models.CharField(max_length=100)),("before",models.JSONField(blank=True,default=dict)),("after",models.JSONField(blank=True,default=dict)),("metadata",models.JSONField(blank=True,default=dict)),("created_at",models.DateTimeField(auto_now_add=True)),("actor",models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.SET_NULL,to=settings.AUTH_USER_MODEL))],options={"ordering":["-created_at"]}),
+        migrations.AddIndex(model_name="extractedrecord",index=models.Index(fields=["entity_type","status"],name="datahub_ext_entity__7d7c1c_idx")),
+        migrations.AddIndex(model_name="extractedrecord",index=models.Index(fields=["source_domain","collected_at"],name="datahub_ext_source_d1f6c0_idx")),
+        migrations.AddConstraint(model_name="entityfield",constraint=models.UniqueConstraint(fields=("entity_type","slug"),name="uniq_entity_field_slug")),
+        migrations.AddConstraint(model_name="extractedrecord",constraint=models.UniqueConstraint(condition=~Q(("fingerprint", "")),fields=("entity_type","fingerprint"),name="uniq_entity_record_fingerprint")),
+        migrations.AddConstraint(model_name="dedupcandidate",constraint=models.UniqueConstraint(fields=("record_a","record_b"),name="uniq_dedup_pair")),
+    ]

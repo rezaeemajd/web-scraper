@@ -45,7 +45,7 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
-    command: celery -A config worker --loglevel=INFO --concurrency=1 --max-tasks-per-child=50
+    command: celery -A config worker --loglevel=INFO --concurrency=1 --prefetch-multiplier=1 --queues=scraping --max-tasks-per-child=50
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -79,5 +79,5 @@ volumes:
 
 networks:
   cdi:
-    name: cofinets_data_network
+    name: ${CDI_NETWORK_NAME:-cofinets_data_network}
     driver: bridge

@@ -1,0 +1,56 @@
+name: CDI Backend CI
+on:
+  push:
+    branches: [cdi-v1-foundation, cdi-v1-p1-core-data-engine]
+  pull_request:
+    branches: [cdi-v1-foundation]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: cdi_test
+          POSTGRES_USER: cdi_test
+          POSTGRES_PASSWORD: cdi_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U cdi_test -d cdi_test"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - run: python manage.py migrate --noinput
+        env:
+          POSTGRES_DB: cdi_test
+          POSTGRES_USER: cdi_test
+          POSTGRES_PASSWORD: cdi_test
+          POSTGRES_HOST: 127.0.0.1
+          REDIS_URL: redis://127.0.0.1:6379/0
+      - run: python manage.py makemigrations --check --dry-run
+        env:
+          POSTGRES_DB: cdi_test
+          POSTGRES_USER: cdi_test
+          POSTGRES_PASSWORD: cdi_test
+          POSTGRES_HOST: 127.0.0.1
+          REDIS_URL: redis://127.0.0.1:6379/0
+      - run: pytest -q
+        env:
+          POSTGRES_DB: cdi_test
+          POSTGRES_USER: cdi_test
+          POSTGRES_PASSWORD: cdi_test
+          POSTGRES_HOST: 127.0.0.1
+          REDIS_URL: redis://127.0.0.1:6379/0

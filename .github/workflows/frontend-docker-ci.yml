@@ -1,0 +1,17 @@
+name: CDI Frontend Docker CI
+
+on:
+  push:
+    branches: [cdi-v1-p1-core-data-engine]
+  pull_request:
+    branches: [cdi-v1-foundation]
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build frontend image
+        run: docker build --tag cdi-frontend-ci:latest ./frontend
+      - name: Verify image
+        run: docker image inspect cdi-frontend-ci:latest >/dev/null
