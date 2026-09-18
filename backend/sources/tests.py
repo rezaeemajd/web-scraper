@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 
 from datahub.models import RawCapture
@@ -32,10 +34,11 @@ class _FakeResponse:
 
 
 class _FakeClient:
-    response = None
+    responses = []
+    init_kwargs = []
 
     def __init__(self, *args, **kwargs):
-        pass
+        type(self).init_kwargs.append(kwargs)
 
     def __enter__(self):
         return self
@@ -44,10 +47,10 @@ class _FakeClient:
         return False
 
     def get(self, url):
-        return self.response
+        return type(self).responses.pop(0)
 
     def stream(self, method, url):
-        return self.response
+        return type(self).responses.pop(0)
 
 
 @pytest.mark.django_db
@@ -59,14 +62,15 @@ def test_capture_url_persists_sha256_and_respects_response_limit(monkeypatch):
         respect_robots=False,
         max_response_bytes=5,
     )
-    _FakeClient.response = _FakeResponse(source.base_url + "/page", body=b"abcdefghij")
+    _FakeClient.responses = [_FakeResponse(source.base_url + "/page", body=b"abcdefghij")]
+    _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
 
     assert capture.status == RawCapture.Status.SUCCESS
     assert capture.body == "abcde"
-    assert capture.body_sha256 == __import__("hashlib").sha256(b"abcde").hexdigest()
+    assert capture.body_sha256 == hashlib.sha256(b"abcde").hexdigest()
 
 
 @pytest.mark.django_db
@@ -77,10 +81,40 @@ def test_capture_url_blocks_external_redirect(monkeypatch):
         base_url="https://example.com",
         respect_robots=False,
     )
-    _FakeClient.response = _FakeResponse("https://evil.example/landing", body=b"blocked")
+    _FakeClient.responses = [_FakeResponse("https://evil.example/landing", body=b"blocked")]
+    _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
 
     assert capture.status == RawCapture.Status.BLOCKED
     assert capture.error_message == "redirected outside source domain"
+
+
+@pytest.mark.django_db
+def test_capture_url_does_not_follow_external_robots_redirect(monkeypatch):
+    source = Source.objects.create(
+        name="Robots Redirect Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=True,
+    )
+    _FakeClient.responses = [
+        _FakeResponse(
+            "https://evil.example/robots.txt",
+            body=b"User-agent: *\nDisallow: /page\n",
+        ),
+        _FakeResponse(
+            "https://example.com/page",
+            body=b"<html>allowed</html>",
+        ),
+    ]
+    _FakeClient.init_kwargs = []
+    monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+
+    capture = fetcher.capture_url(source, "https://example.com/page")
+
+    assert capture.status == RawCapture.Status.SUCCESS
+    assert capture.body == "<html>allowed</html>"
+    assert _FakeClient.init_kwargs[0]["follow_redirects"] is False
+    assert _FakeClient.init_kwargs[1]["follow_redirects"] is True
