@@ -1,4 +1,5 @@
 import pytest
+from django.utils import timezone
 from sources.models import Source
 from datahub.models import EntityType
 from .engine import extract_static_html
@@ -176,3 +177,41 @@ def test_run_scraper_rejects_inactive_source_without_creating_run():
         run_scraper.run(scraper.pk)
 
     assert not ScraperRun.objects.filter(scraper=scraper).exists()
+
+@pytest.mark.django_db
+def test_run_scraper_blocks_existing_active_run_even_without_redis_lock(
+    monkeypatch,
+):
+    from . import tasks
+    from .models import ScraperRun
+
+    source = Source.objects.create(
+        name="Duplicate Guard Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="بیمارستان", slug="hospital-duplicate")
+    scraper = Scraper.objects.create(
+        name="Duplicate guard scraper",
+        source=source,
+        start_url="https://example.com/hospital/1",
+        entity_type=entity,
+    )
+    existing = ScraperRun.objects.create(
+        scraper=scraper,
+        status=ScraperRun.Status.RUNNING,
+        started_at=timezone.now(),
+    )
+
+    monkeypatch.setattr(tasks, "_scraper_lock", lambda scraper_id: (object(), "key", "token"))
+    monkeypatch.setattr(tasks, "_release_scraper_lock", lambda client, key, token: None)
+
+    with pytest.raises(tasks.DuplicateScraperRun, match="active run"):
+        tasks.run_scraper.run(scraper.pk)
+
+    assert ScraperRun.objects.filter(
+        scraper=scraper,
+        status=ScraperRun.Status.RUNNING,
+    ).count() == 1
+    assert ScraperRun.objects.get(pk=existing.pk).finished_at is None
