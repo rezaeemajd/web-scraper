@@ -126,22 +126,48 @@ def _request_with_safe_redirects(source: Source, url: str):
         for _ in range(_MAX_REDIRECTS + 1):
             _assert_public_url(current_url)
             if not _same_domain(source, current_url):
-                raise FetchBlocked("redirected outside source domain" if redirected else "url is outside source domain")
+                raise FetchBlocked(
+                    "redirected outside source domain"
+                    if redirected
+                    else "url is outside source domain"
+                )
 
-            response = client.stream("GET", current_url)
-            response.__enter__()
-            if response.status_code not in {301, 302, 303, 307, 308}:
-                return response, current_url
+            with client.stream("GET", current_url) as response:
+                if response.status_code not in {301, 302, 303, 307, 308}:
+                    chunks = []
+                    total = 0
+                    for chunk in response.iter_bytes():
+                        if not chunk:
+                            continue
+                        remaining = source.max_response_bytes - total
+                        if remaining <= 0:
+                            break
+                        piece = chunk[:remaining]
+                        chunks.append(piece)
+                        total += len(piece)
+                        if total >= source.max_response_bytes:
+                            break
+                    body = b"".join(chunks)
+                    buffered = httpx.Response(
+                        response.status_code,
+                        headers=response.headers,
+                        content=body,
+                        request=response.request,
+                    )
+                    return buffered, current_url
 
-            location = response.headers.get("location")
-            if not location:
-                return response, current_url
-            response.close()
-            current_url = urljoin(current_url, location)
-            redirected = True
+                location = response.headers.get("location")
+                if not location:
+                    return httpx.Response(
+                        response.status_code,
+                        headers=response.headers,
+                        content=b"",
+                        request=response.request,
+                    ), current_url
+                current_url = urljoin(current_url, location)
+                redirected = True
 
     raise FetchBlocked("too many redirects")
-
 
 def capture_url(source: Source, url: str) -> RawCapture:
     if not source.allowed or source.status != Source.Status.ACTIVE:
