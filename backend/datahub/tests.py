@@ -244,7 +244,7 @@ def test_authenticated_users_cannot_mutate_workflow_status_directly():
     task = ReviewTask.objects.create(record=record)
     other = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/s", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="8" * 64)
     candidate = DedupCandidate.objects.create(record_a=record, record_b=other, similarity="0.8000")
-    user = get_user_model().objects.create_user(username="api-user")
+    user = get_user_model().objects.create_user(username="api-user", is_staff=True)
     client = APIClient(); client.force_authenticate(user=user)
 
     record_response = client.patch(f"/api/v1/records/{record.pk}/", {"status": "approved"}, format="json")
