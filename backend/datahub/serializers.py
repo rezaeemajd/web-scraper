@@ -10,10 +10,10 @@ class LocationSerializer(serializers.ModelSerializer):
 class RawCaptureSerializer(serializers.ModelSerializer):
     class Meta: model=RawCapture; fields="__all__"
 class ExtractedRecordSerializer(serializers.ModelSerializer):
-    class Meta: model=ExtractedRecord; fields="__all__"; read_only_fields=["normalized_payload","fingerprint","quality_score","validation_errors","collected_at","updated_at"]
+    class Meta: model=ExtractedRecord; fields="__all__"; read_only_fields=["normalized_payload","fingerprint","quality_score","validation_errors","status","collected_at","updated_at"]
 class DedupCandidateSerializer(serializers.ModelSerializer):
-    class Meta: model=DedupCandidate; fields="__all__"
+    class Meta: model=DedupCandidate; fields="__all__"; read_only_fields=["status","created_at"]
 class ReviewTaskSerializer(serializers.ModelSerializer):
-    class Meta: model=ReviewTask; fields="__all__"
+    class Meta: model=ReviewTask; fields="__all__"; read_only_fields=["status","created_at","updated_at"]
 class AuditEventSerializer(serializers.ModelSerializer):
     class Meta: model=AuditEvent; fields="__all__"
