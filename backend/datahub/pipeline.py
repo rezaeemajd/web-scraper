@@ -1,5 +1,6 @@
 import hashlib, json
 from decimal import Decimal
+from django.db import IntegrityError
 from urllib.parse import urlsplit
 from .models import ExtractedRecord
 
@@ -21,5 +22,31 @@ def quality_score(payload,entity_type,errors):
     if not fields: return Decimal("0.0000")
     filled=sum(1 for f in fields if payload.get(f.slug) not in (None,"",[])); return Decimal(str(round(max(0.0,filled/len(fields)-min(0.5,len(errors)*0.1)),4)))
 def process_record(*,entity_type,url,payload,raw_capture=None,evidence=None,source_domain=None):
-    normalized=normalize_value(payload); errors=validate_payload(entity_type,normalized); score=quality_score(normalized,entity_type,errors)
-    return ExtractedRecord.objects.create(entity_type=entity_type,raw_capture=raw_capture,source_url=canonical_url(url),source_domain=source_domain or (urlsplit(url).hostname or "").lower(),payload=payload,normalized_payload=normalized,evidence=evidence or [],confidence=score,quality_score=score,fingerprint=fingerprint(normalized),validation_errors=errors,status=ExtractedRecord.Status.REVIEW if errors else ExtractedRecord.Status.PARSED)
+    normalized=normalize_value(payload)
+    errors=validate_payload(entity_type,normalized)
+    score=quality_score(normalized,entity_type,errors)
+    values={
+        "raw_capture":raw_capture,
+        "source_url":canonical_url(url),
+        "source_domain":source_domain or (urlsplit(url).hostname or "").lower(),
+        "payload":payload,
+        "normalized_payload":normalized,
+        "evidence":evidence or [],
+        "confidence":score,
+        "quality_score":score,
+        "fingerprint":fingerprint(normalized),
+        "validation_errors":errors,
+        "status":ExtractedRecord.Status.REVIEW if errors else ExtractedRecord.Status.PARSED,
+    }
+    try:
+        record, _ = ExtractedRecord.objects.get_or_create(
+            entity_type=entity_type,
+            fingerprint=values["fingerprint"],
+            defaults=values,
+        )
+    except IntegrityError:
+        record = ExtractedRecord.objects.get(
+            entity_type=entity_type,
+            fingerprint=values["fingerprint"],
+        )
+    return record
