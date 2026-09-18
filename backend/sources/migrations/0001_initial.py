@@ -1,0 +1,5 @@
+from django.db import migrations, models
+class Migration(migrations.Migration):
+    initial=True
+    dependencies=[]
+    operations=[migrations.CreateModel(name="Source",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("name",models.CharField(max_length=200)),("domain",models.CharField(db_index=True,max_length=255)),("base_url",models.URLField()),("status",models.CharField(choices=[("active","Active"),("paused","Paused"),("disabled","Disabled")],default="active",max_length=20)),("priority",models.PositiveSmallIntegerField(default=50)),("rate_limit_per_minute",models.PositiveIntegerField(default=30)),("respect_robots",models.BooleanField(default=True)),("allowed",models.BooleanField(default=True)),("notes",models.TextField(blank=True)),("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True))],options={"ordering":["-priority","name"]})]
