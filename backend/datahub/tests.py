@@ -144,3 +144,40 @@ def test_audit_api_is_read_only_for_anonymous_users():
     post_response = client.post("/api/v1/audit/", {"action": "forged"}, format="json")
     assert post_response.status_code == 403
     assert not AuditEvent.objects.filter(action="forged").exists()
+
+@pytest.mark.django_db
+def test_review_transition_updates_record_and_creates_audit_event():
+    from django.contrib.auth import get_user_model
+    from .models import AuditEvent, ReviewTask
+    from .review import transition_review_task
+
+    entity = EntityType.objects.create(name="داروخانه", slug="pharmacy-review")
+    record = process_record(entity_type=entity, url="https://example.com/p", payload={"name": "الف"})
+    task = ReviewTask.objects.create(record=record, reason="manual check")
+    user = get_user_model().objects.create_user(username="reviewer")
+
+    transition_review_task(task_id=task.pk, status=ReviewTask.Status.APPROVED, actor=user, notes="verified")
+
+    task.refresh_from_db()
+    record.refresh_from_db()
+    event = AuditEvent.objects.get(action="review.transition", object_id=str(task.pk))
+    assert task.status == ReviewTask.Status.APPROVED
+    assert task.notes == "verified"
+    assert record.status == ExtractedRecord.Status.APPROVED
+    assert event.actor_id == user.pk
+    assert event.before["review_status"] == ReviewTask.Status.OPEN
+    assert event.after["record_status"] == ExtractedRecord.Status.APPROVED
+
+
+@pytest.mark.django_db
+def test_review_transition_rejects_invalid_repeat_transition():
+    from .models import ReviewTask
+    from .review import transition_review_task
+
+    entity = EntityType.objects.create(name="کلینیک", slug="clinic-review")
+    record = process_record(entity_type=entity, url="https://example.com/c", payload={"name": "الف"})
+    task = ReviewTask.objects.create(record=record)
+    transition_review_task(task_id=task.pk, status=ReviewTask.Status.REJECTED)
+
+    with pytest.raises(ValueError, match="invalid transition"):
+        transition_review_task(task_id=task.pk, status=ReviewTask.Status.APPROVED)
