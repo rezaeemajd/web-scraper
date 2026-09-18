@@ -2,7 +2,7 @@ import pytest
 from django.utils import timezone
 from sources.models import Source
 from datahub.models import EntityType
-from .engine import extract_static_html
+from .engine import execute_many, extract_static_html
 from .models import Scraper
 
 
@@ -102,7 +102,7 @@ def test_run_scraper_records_success(monkeypatch):
         status=RawCapture.Status.SUCCESS,
     )
     monkeypatch.setattr(
-        "scraping.tasks.execute",
+        "scraping.tasks.execute_many",
         lambda scraper: (
             __import__("datahub.models", fromlist=["ExtractedRecord"]).ExtractedRecord.objects.create(
                 entity_type=entity,
@@ -112,9 +112,7 @@ def test_run_scraper_records_success(monkeypatch):
                 normalized_payload={"name": "دکتر الف"},
                 raw_capture=capture,
                 fingerprint="a" * 64,
-            ),
-            capture,
-        ),
+            )], [capture]),
     )
 
     result = run_scraper.run(scraper.pk)
@@ -294,3 +292,80 @@ def test_extract_static_html_requires_fields():
 
     with pytest.raises(ScraperConfigError, match="fields"):
         extract_static_html(scraper, "<html></html>")
+
+
+@pytest.mark.django_db
+def test_extract_static_html_supports_multiple_records():
+    source = Source.objects.create(
+        name="Multi Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="دارو چندتایی", slug="drug-multi")
+    scraper = Scraper.objects.create(
+        name="Multi scraper",
+        source=source,
+        start_url="https://example.com/drugs",
+        entity_type=entity,
+        extraction_config={
+            "record_selector": ".drug",
+            "fields": {"name": ".name", "price": ".price"},
+        },
+    )
+
+    payloads, evidences = extract_static_html(
+        scraper,
+        '<div class="drug"><span class="name">آسپرین</span><span class="price">100</span></div>'
+        '<div class="drug"><span class="name">استامینوفن</span><span class="price">200</span></div>',
+    )
+
+    assert payloads == [
+        {"name": "آسپرین", "price": "100"},
+        {"name": "استامینوفن", "price": "200"},
+    ]
+    assert evidences[1][0]["scope"] == "record:1"
+
+
+@pytest.mark.django_db
+def test_execute_many_follows_bounded_pagination_and_avoids_loops(monkeypatch):
+    from datahub.models import RawCapture
+
+    source = Source.objects.create(
+        name="Pagination Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="پزشک صفحه‌ای", slug="doctor-pages")
+    scraper = Scraper.objects.create(
+        name="Pagination scraper",
+        source=source,
+        start_url="https://example.com/page/1",
+        entity_type=entity,
+        extraction_config={
+            "fields": {"name": ".name"},
+            "pagination": {"next_selector": "a.next", "max_pages": 3},
+        },
+    )
+    pages = {
+        "https://example.com/page/1": '<div class="name">A</div><a class="next" href="/page/2">next</a>',
+        "https://example.com/page/2": '<div class="name">B</div><a class="next" href="/page/2">loop</a>',
+    }
+
+    def fake_capture(source, url):
+        return RawCapture(
+            url=url,
+            status_code=200,
+            body=pages[url],
+            status=RawCapture.Status.SUCCESS,
+        )
+
+    monkeypatch.setattr("scraping.engine.capture_url", fake_capture)
+    records, captures = execute_many(scraper)
+
+    assert len(records) == 2
+    assert [capture.url for capture in captures] == [
+        "https://example.com/page/1",
+        "https://example.com/page/2",
+    ]
