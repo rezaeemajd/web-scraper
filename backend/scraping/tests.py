@@ -176,4 +176,3 @@ def test_run_scraper_rejects_inactive_source_without_creating_run():
         run_scraper.run(scraper.pk)
 
     assert not ScraperRun.objects.filter(scraper=scraper).exists()
-}
