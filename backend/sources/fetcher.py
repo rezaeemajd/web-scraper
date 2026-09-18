@@ -152,7 +152,7 @@ def _request_with_safe_redirects(source: Source, url: str):
                         response.status_code,
                         headers=response.headers,
                         content=body,
-                        request=response.request,
+                        request=getattr(response, "request", None),
                     )
                     return buffered, current_url
 
