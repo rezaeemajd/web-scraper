@@ -70,19 +70,18 @@ def _extract_payload(node, fields, evidence_prefix=""):
 
         value = match.text(strip=True) if match else ""
         payload[field] = value
-        evidence.append(
-            {
-                "field": field,
-                "selector": selector,
-                "value": value,
-                "scope": evidence_prefix,
-            }
-        )
+        item = {
+            "field": field,
+            "selector": selector,
+            "value": value,
+        }
+        if evidence_prefix:
+            item["scope"] = evidence_prefix
+        evidence.append(item)
     return payload, evidence
 
 
-def extract_static_html(scraper: Scraper, html: str):
-    config = validate_extraction_config(scraper.extraction_config or {})
+def _extract_static_html_many(config, html):
     tree = LexborHTMLParser(html)
     record_selector = config.get("record_selector")
 
@@ -102,16 +101,28 @@ def extract_static_html(scraper: Scraper, html: str):
         payload, evidence = _extract_payload(
             node,
             config["fields"],
-            evidence_prefix=f"record:{index}",
+            evidence_prefix=f"record:{index}" if record_selector else "",
         )
         payloads.append(payload)
         evidences.append(evidence)
-
     return payloads, evidences
 
 
-def _next_page_url(scraper, html, current_url):
+def extract_static_html_many(scraper: Scraper, html: str):
     config = validate_extraction_config(scraper.extraction_config or {})
+    return _extract_static_html_many(config, html)
+
+
+def extract_static_html(scraper: Scraper, html: str):
+    """Backward-compatible single-record API; multi-record configs return lists."""
+    config = validate_extraction_config(scraper.extraction_config or {})
+    payloads, evidences = _extract_static_html_many(config, html)
+    if config.get("record_selector"):
+        return payloads, evidences
+    return payloads[0], evidences[0]
+
+
+def _next_page_url(config, html, current_url):
     pagination = config.get("pagination") or {}
     selector = pagination.get("next_selector")
     if not selector:
@@ -130,7 +141,6 @@ def _next_page_url(scraper, html, current_url):
     href = node.attributes.get("href")
     if not href:
         return None
-
     return urljoin(current_url, href)
 
 
@@ -156,7 +166,7 @@ def execute_many(scraper: Scraper):
         if capture.status != capture.Status.SUCCESS:
             break
 
-        payloads, evidences = extract_static_html(scraper, capture.body)
+        payloads, evidences = _extract_static_html_many(config, capture.body)
         for payload, evidence in zip(payloads, evidences):
             records.append(
                 process_record(
@@ -169,7 +179,7 @@ def execute_many(scraper: Scraper):
                 )
             )
 
-        next_url = _next_page_url(scraper, capture.body, current_url)
+        next_url = _next_page_url(config, capture.body, current_url)
         if not next_url:
             break
         current_url = next_url
