@@ -34,6 +34,7 @@ def test_extraction_config_missing_selector_returns_empty_value():
     assert payload == {"name": ""}
     assert evidence == [{"field": "name", "selector": ".missing", "value": ""}]
 
+
 @pytest.mark.django_db
 def test_execute_runs_capture_extraction_and_record_pipeline(monkeypatch):
     from datahub.models import ExtractedRecord, RawCapture
@@ -149,3 +150,30 @@ def test_run_scraper_rejects_inactive_scraper():
         run_scraper.run(scraper.pk)
 
     assert not ScraperRun.objects.filter(scraper=scraper).exists()
+
+
+@pytest.mark.django_db
+def test_run_scraper_rejects_inactive_source_without_creating_run():
+    from .tasks import run_scraper
+    from .models import ScraperRun
+
+    source = Source.objects.create(
+        name="Paused Task Source",
+        domain="example.com",
+        base_url="https://example.com",
+        status=Source.Status.PAUSED,
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="داروخانه", slug="pharmacy-task")
+    scraper = Scraper.objects.create(
+        name="Paused source scraper",
+        source=source,
+        start_url="https://example.com/pharmacy/1",
+        entity_type=entity,
+    )
+
+    with pytest.raises(ValueError, match="source is not active"):
+        run_scraper.run(scraper.pk)
+
+    assert not ScraperRun.objects.filter(scraper=scraper).exists()
+}
