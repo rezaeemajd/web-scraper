@@ -70,3 +70,82 @@ def test_execute_runs_capture_extraction_and_record_pipeline(monkeypatch):
     assert record.source_domain == "example.com"
     assert record.evidence[0]["selector"] == "h1.name"
     assert ExtractedRecord.objects.filter(pk=record.pk).exists()
+
+
+@pytest.mark.django_db
+def test_run_scraper_records_success(monkeypatch):
+    from datahub.models import RawCapture
+    from .tasks import run_scraper
+    from .models import ScraperRun
+
+    source = Source.objects.create(
+        name="Task Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="پزشک", slug="doctor-task")
+    scraper = Scraper.objects.create(
+        name="Task scraper",
+        source=source,
+        start_url="https://example.com/doctor/1",
+        entity_type=entity,
+        extraction_config={"fields": {"name": "h1.name"}},
+    )
+    capture = RawCapture.objects.create(
+        url=scraper.start_url,
+        status_code=200,
+        content_type="text/html",
+        body="<h1 class='name'>دکتر الف</h1>",
+        status=RawCapture.Status.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "scraping.tasks.execute",
+        lambda scraper: (
+            __import__("datahub.models", fromlist=["ExtractedRecord"]).ExtractedRecord.objects.create(
+                entity_type=entity,
+                source_url=scraper.start_url,
+                source_domain=source.domain,
+                payload={"name": "دکتر الف"},
+                normalized_payload={"name": "دکتر الف"},
+                raw_capture=capture,
+                fingerprint="a" * 64,
+            ),
+            capture,
+        ),
+    )
+
+    result = run_scraper.run(scraper.pk)
+
+    run = ScraperRun.objects.get(pk=result["run_id"])
+    assert result["status"] == ScraperRun.Status.SUCCESS
+    assert run.status == ScraperRun.Status.SUCCESS
+    assert run.pages_fetched == 1
+    assert run.records_extracted == 1
+    assert run.finished_at is not None
+
+
+@pytest.mark.django_db
+def test_run_scraper_rejects_inactive_scraper():
+    from .tasks import run_scraper
+    from .models import ScraperRun
+
+    source = Source.objects.create(
+        name="Inactive Task Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="کلینیک", slug="clinic-task")
+    scraper = Scraper.objects.create(
+        name="Inactive scraper",
+        source=source,
+        start_url="https://example.com/clinic/1",
+        entity_type=entity,
+        active=False,
+    )
+
+    with pytest.raises(ValueError, match="scraper is inactive"):
+        run_scraper.run(scraper.pk)
+
+    assert not ScraperRun.objects.filter(scraper=scraper).exists()
