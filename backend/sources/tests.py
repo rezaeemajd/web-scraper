@@ -143,9 +143,10 @@ def test_capture_url_enforces_source_rate_limit(monkeypatch):
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
     monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: False)
 
-    with pytest.raises(fetcher.FetchBlocked, match="rate limit exceeded"):
-        fetcher.capture_url(source, "https://example.com/page")
+    capture = fetcher.capture_url(source, "https://example.com/page")
 
+    assert capture.status == RawCapture.Status.BLOCKED
+    assert capture.error_message == "source rate limit exceeded"
     assert len(_FakeClient.responses) == 1
 
 
@@ -187,5 +188,7 @@ def test_capture_url_blocks_private_redirect(monkeypatch):
         if "127.0.0.1" in url else None
     ))
 
-    with pytest.raises(fetcher.FetchBlocked, match="non-public"):
-        fetcher.capture_url(source, "https://example.com/page")
+    capture = fetcher.capture_url(source, "https://example.com/page")
+
+    assert capture.status == RawCapture.Status.BLOCKED
+    assert "non-public" in capture.error_message
