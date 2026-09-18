@@ -232,3 +232,25 @@ def test_dedup_api_is_read_only_for_anonymous_users():
     candidate = DedupCandidate.objects.create(record_a=left, record_b=right, similarity="0.8000")
     response = APIClient().post(f"/api/v1/duplicates/{candidate.pk}/resolve/", {"status":"rejected"}, format="json")
     assert response.status_code == 403
+
+@pytest.mark.django_db
+def test_authenticated_users_cannot_mutate_workflow_status_directly():
+    from django.contrib.auth import get_user_model
+    from rest_framework.test import APIClient
+    from .models import DedupCandidate, ReviewTask
+
+    entity = EntityType.objects.create(name="آزمایشگاه", slug="lab-status")
+    record = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/r", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="9" * 64)
+    task = ReviewTask.objects.create(record=record)
+    other = ExtractedRecord.objects.create(entity_type=entity, source_url="https://example.com/s", source_domain="example.com", payload={}, normalized_payload={}, fingerprint="8" * 64)
+    candidate = DedupCandidate.objects.create(record_a=record, record_b=other, similarity="0.8000")
+    user = get_user_model().objects.create_user(username="api-user")
+    client = APIClient(); client.force_authenticate(user=user)
+
+    record_response = client.patch(f"/api/v1/records/{record.pk}/", {"status": "approved"}, format="json")
+    review_response = client.patch(f"/api/v1/reviews/{task.pk}/", {"status": "approved"}, format="json")
+    dedup_response = client.patch(f"/api/v1/duplicates/{candidate.pk}/", {"status": "merged"}, format="json")
+
+    assert record_response.status_code == 400
+    assert review_response.status_code == 400
+    assert dedup_response.status_code == 400
