@@ -56,6 +56,24 @@ def test_dedup_candidate_is_created_for_high_similarity():
     assert set(candidates[0].matched_fields) == {"city", "name"}
 
 
+
+@pytest.mark.django_db
+def test_process_record_is_idempotent_for_same_normalized_fingerprint():
+    entity = EntityType.objects.create(name="دارو تکراری", slug="drug-idempotent")
+    first = process_record(
+        entity_type=entity,
+        url="https://example.com/a",
+        payload={"name": " كالا "},
+    )
+    second = process_record(
+        entity_type=entity,
+        url="https://example.com/b",
+        payload={"name": "کالا"},
+    )
+
+    assert first.pk == second.pk
+    assert ExtractedRecord.objects.filter(entity_type=entity).count() == 1
+
 def test_canonical_url():
     assert canonical_url("HTTPS://Example.COM/a///?x=1") == "https://example.com/a?x=1"
 
