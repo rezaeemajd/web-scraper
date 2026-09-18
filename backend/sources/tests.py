@@ -87,7 +87,8 @@ def test_capture_url_blocks_external_redirect(monkeypatch):
         base_url="https://example.com",
         respect_robots=False,
     )
-    _FakeClient.responses = [_FakeResponse("https://evil.example/landing", body=b"blocked")]
+    _FakeClient.responses = [_FakeResponse("https://example.com/page", body=b"", status_code=302)]
+    _FakeClient.responses[0].headers["location"] = "https://evil.example/landing"
     _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
     monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
@@ -125,7 +126,7 @@ def test_capture_url_does_not_follow_external_robots_redirect(monkeypatch):
     assert capture.status == RawCapture.Status.SUCCESS
     assert capture.body == "<html>allowed</html>"
     assert _FakeClient.init_kwargs[0]["follow_redirects"] is False
-    assert _FakeClient.init_kwargs[1]["follow_redirects"] is True
+    assert _FakeClient.init_kwargs[1]["follow_redirects"] is False
 
 
 @pytest.mark.django_db
@@ -163,7 +164,7 @@ def test_assert_public_url_blocks_private_and_accepts_public(monkeypatch):
     )
     _assert_public_url("https://example.com/")
 
-def test_capture_url_blocks_private_redirect(monkeypatch):
+@pytest.mark.django_db\ndef test_capture_url_blocks_private_redirect(monkeypatch):
     source = Source.objects.create(
         name="Private Redirect Source",
         domain="example.com",
