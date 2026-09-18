@@ -336,3 +336,25 @@ def test_dedup_blocks_candidates_using_searchable_fields():
     candidates = find_candidates(target)
     assert [item.record_b_id for item in candidates] == [match.pk]
     assert unrelated.pk not in {item.record_a_id for item in candidates}
+
+
+@pytest.mark.django_db
+def test_raw_capture_list_omits_large_body_and_headers():
+    from .models import RawCapture
+    from rest_framework.test import APIClient
+
+    capture = RawCapture.objects.create(
+        url="https://example.com/large",
+        body="x" * 10000,
+        headers={"content-type": "text/html"},
+    )
+    response = APIClient().get("/api/v1/raw/")
+    assert response.status_code == 200
+    item = next(row for row in response.data["results"] if row["id"] == capture.pk)
+    assert "body" not in item
+    assert "headers" not in item
+
+    detail = APIClient().get(f"/api/v1/raw/{capture.pk}/")
+    assert detail.status_code == 200
+    assert detail.data["body"] == "x" * 10000
+    assert detail.data["headers"]["content-type"] == "text/html"
