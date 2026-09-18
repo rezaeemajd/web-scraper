@@ -164,7 +164,9 @@ def test_assert_public_url_blocks_private_and_accepts_public(monkeypatch):
     )
     _assert_public_url("https://example.com/")
 
-@pytest.mark.django_db\ndef test_capture_url_blocks_private_redirect(monkeypatch):
+
+@pytest.mark.django_db
+def test_capture_url_blocks_private_redirect(monkeypatch):
     source = Source.objects.create(
         name="Private Redirect Source",
         domain="example.com",
