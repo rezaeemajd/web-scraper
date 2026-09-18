@@ -80,3 +80,35 @@ def test_similarity_is_symmetric_and_ignores_empty_matches():
     score_ba, fields_ba = similarity({"name": "کالا", "phone": "1"}, {"name": "کالا", "phone": ""})
     assert score_ab == score_ba == Decimal("0.5000")
     assert fields_ab == fields_ba == ["name"]
+
+@pytest.mark.django_db
+def test_records_api_filters_by_status_and_entity_type():
+    from rest_framework.test import APIClient
+
+    entity = EntityType.objects.create(name="داروخانه", slug="pharmacy")
+    other = EntityType.objects.create(name="کلینیک", slug="clinic")
+    process_record(entity_type=entity, url="https://example.com/a", payload={"name": "الف"})
+    process_record(entity_type=other, url="https://example.com/b", payload={"name": "ب"})
+
+    response = APIClient().get("/api/v1/records/", {"entity_type": entity.pk, "status": "parsed"})
+
+    assert response.status_code == 200
+    assert response.data["count"] == 1
+    assert response.data["results"][0]["entity_type"] == entity.pk
+    assert response.data["results"][0]["status"] == "parsed"
+
+
+@pytest.mark.django_db
+def test_raw_capture_api_is_read_only_for_anonymous_users():
+    from rest_framework.test import APIClient
+    from .models import RawCapture
+
+    capture = RawCapture.objects.create(url="https://example.com/raw", body="x")
+    client = APIClient()
+
+    response = client.get(f"/api/v1/raw/{capture.pk}/")
+    assert response.status_code == 200
+
+    delete_response = client.delete(f"/api/v1/raw/{capture.pk}/")
+    assert delete_response.status_code == 403
+    assert RawCapture.objects.filter(pk=capture.pk).exists()
