@@ -22,6 +22,7 @@ from .serializers import (
     EntityTypeSerializer,
     ExtractedRecordSerializer,
     LocationSerializer,
+    RawCaptureListSerializer,
     RawCaptureSerializer,
     ReviewTaskSerializer,
 )
@@ -52,6 +53,17 @@ class LocationViewSet(viewsets.ModelViewSet):
 class RawCaptureViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RawCapture.objects.all()
     serializer_class = RawCaptureSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == "list":
+            return queryset.defer("body", "headers")
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return RawCaptureListSerializer
+        return RawCaptureSerializer
     permission_classes = [StaffWritePermission]
     search_fields = ["url", "body_sha256"]
 
