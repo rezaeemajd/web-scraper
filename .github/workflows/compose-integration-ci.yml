@@ -33,7 +33,7 @@ jobs:
         run: docker compose config -q
 
       - name: Start backend stack
-        run: docker compose up -d db redis backend
+        run: docker compose up -d db redis backend worker beat frontend
 
       - name: Wait for backend
         run: |
@@ -52,6 +52,21 @@ jobs:
 
       - name: Check readiness
         run: curl -fsS http://127.0.0.1:8001/ready/
+
+      - name: Check Celery worker
+        run: docker compose exec -T backend celery -A config inspect ping --timeout=10
+
+      - name: Check frontend
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs frontend
+          exit 1
 
       - name: Stop integration stack
         if: always()
