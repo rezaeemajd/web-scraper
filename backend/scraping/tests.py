@@ -240,8 +240,8 @@ def test_run_scraper_records_blocked_capture_as_blocked(monkeypatch):
         error_message="robots.txt disallowed",
     )
     monkeypatch.setattr(
-        "scraping.tasks.execute",
-        lambda scraper: (None, capture),
+        "scraping.tasks.execute_many",
+        lambda scraper: ([], [capture]),
     )
 
     result = run_scraper.run(scraper.pk)
@@ -369,3 +369,24 @@ def test_execute_many_follows_bounded_pagination_and_avoids_loops(monkeypatch):
         "https://example.com/page/1",
         "https://example.com/page/2",
     ]
+
+
+def test_extract_static_html_many_uses_record_scope_only_for_multi_record_configs():
+    scraper = type(
+        "ScraperStub",
+        (),
+        {
+            "extraction_config": {
+                "record_selector": ".item",
+                "fields": {"name": ".name"},
+            }
+        },
+    )()
+    payloads, evidences = extract_static_html(
+        scraper,
+        '<div class="item"><span class="name">A</span></div>'
+        '<div class="item"><span class="name">B</span></div>',
+    )
+    assert payloads == [{"name": "A"}, {"name": "B"}]
+    assert evidences[0][0]["scope"] == "record:0"
+    assert evidences[1][0]["scope"] == "record:1"
