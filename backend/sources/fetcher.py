@@ -177,8 +177,12 @@ def capture_url(source: Source, url: str) -> RawCapture:
             )
         finally:
             response.close()
-    except FetchBlocked:
-        raise
+    except FetchBlocked as exc:
+        return RawCapture.objects.create(
+            url=url,
+            status=RawCapture.Status.BLOCKED,
+            error_message=str(exc)[:2000],
+        )
     except Exception as exc:
         return RawCapture.objects.create(
             url=url,
