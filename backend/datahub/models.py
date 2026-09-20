@@ -28,6 +28,20 @@ class ExtractedRecord(models.Model):
         ]
         constraints=[models.UniqueConstraint(fields=["entity_type","fingerprint"],condition=~Q(fingerprint=""),name="uniq_entity_record_fingerprint"),
             models.UniqueConstraint(fields=["entity_type","canonical_key"],condition=~Q(canonical_key=""),name="uniq_entity_record_canonical_key")]
+class RecordChange(models.Model):
+    record=models.ForeignKey(ExtractedRecord,on_delete=models.CASCADE,related_name="changes")
+    previous_observation=models.ForeignKey("RecordObservation",on_delete=models.SET_NULL,null=True,blank=True,related_name="changes_from")
+    observation=models.ForeignKey("RecordObservation",on_delete=models.CASCADE,related_name="change")
+    changed_fields=models.JSONField(default=list)
+    before=models.JSONField(default=dict,blank=True)
+    after=models.JSONField(default=dict,blank=True)
+    detected_at=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        ordering=["-detected_at","-id"]
+        constraints=[
+            models.UniqueConstraint(fields=["record","observation"],name="uniq_record_change_observation")
+        ]
+
 class RecordObservation(models.Model):
     record=models.ForeignKey(ExtractedRecord,on_delete=models.CASCADE,related_name="observations")
     raw_capture=models.ForeignKey(RawCapture,on_delete=models.SET_NULL,null=True,blank=True,related_name="observations")
