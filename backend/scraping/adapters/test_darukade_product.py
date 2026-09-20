@@ -1,4 +1,4 @@
-from .darukade_product import extract_products
+from scraping.adapters.darukade_product import extract_products
 
 
 def test_extract_products_keeps_retail_price_and_provenance():
