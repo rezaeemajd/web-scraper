@@ -16,13 +16,13 @@
 | Export | عملیاتی | 85% | 15% |
 | Scraper / Celery | عملیاتی + hardening | 82% | 18% |
 | Real Iran benchmark | Gardasil آماده؛ اجرای live سرور باقی | 55% | 45% |
-| Pharmacy / geography | طراحی هدف؛ پیاده‌سازی بعدی | 20% | 80% |
+| Pharmacy / geography | مدل + materialization + real adapter + bounded command | 52% | 48% |
 | Explorer API | پایه موجود | 60% | 40% |
 | RTL UI | ابتدایی | 15% | 85% |
-| Isolated staging | در حال آماده‌سازی | 35% | 65% |
+| Isolated staging | در حال آماده‌سازی؛ commandهای bounded آماده | 42% | 58% |
 | Production | عمداً صفر | 0% | 100% |
 
-**برآورد کل: ~63%**؛ درصدها شاخص مهندسی تقریبی هستند، نه KPI اندازه‌گیری‌شده.
+**برآورد کل: ~66%**؛ درصدها شاخص مهندسی تقریبی هستند، نه KPI اندازه‌گیری‌شده.
 
 ## GitHub
 
@@ -30,7 +30,7 @@
 - Foundation: cdi-v1-foundation @ c072da00dfce2d3c5c27b11c499a73c45343c95b
 - P1: cdi-v1-p1-core-data-engine
 - PR #1: feat: CDI P1 core data engine — OPEN / DRAFT / NOT MERGED
-- آخرین commit branch: `21103f00441ff6c4edaef49b794dcf65b5e5f714` (Pharmacy materialization + tests)
+- آخرین commit branch: `0b1b9a66c154bbfb72b230d21e749e98170ab891` (pharmacy identity hardening + bounded real crawl command + regression test)
 - force-push/reset/delete نسخه‌ها ممنوع.
 
 ## CI و اصلاحات اخیر
@@ -166,6 +166,14 @@ The migration remains pre-merge and therefore safe to correct in place. New head
 - commitهای جدید بعد از CI سبز هستند؛ بنابراین این دو commit هنوز باید یک بار از CI عبور کنند. تا قبل از نتیجه جدید، سبز بودن آن‌ها ادعا نمی‌شود.
 - این مرحله هنوز crawl واقعی pharmacy نیست. قدم بعدی: adapter/selector محدود Pillix برای استخراج رکوردهای واقعی داروخانه، سپس اجرای crawl یک صفحه/حداکثر چند صفحه در isolated staging و بررسی Location dedup + Pharmacy upsert.
 
+
+## 2026-09-20 — Pharmacy directory integration hardening
+
+- A real schema issue was caught before live persistence: a directory page contains many pharmacies, so `source_domain + source_url` cannot be the Pharmacy uniqueness key. It was changed to `source_domain + canonical_key` in both model and still-unmerged migration 0010; no new migration was added.
+- `upsert_pharmacy_from_record()` now upserts by canonical pharmacy identity, while retaining the page URL as provenance.
+- Added a regression test proving two pharmacies from the same Pillix directory URL materialize as two separate Pharmacy rows.
+- Added bounded command `cdi_pharmacy_smoke` using the real Pillix pharmacy directory URL, Safe Fetch, the dedicated Pillix adapter, `process_records()`, and Pharmacy materialization. Default mode is fully transactional dry-run; `--persist` is explicit. It creates zero MarketObservation records because directory presence is not product availability.
+- The latest PR head is `0b1b9a66c154bbfb72b230d21e749e98170ab891`. CI for the immediately preceding command commit was queued; the latest test commit has not yet reported workflow runs, so it is **not** claimed green.
 
 ## 2026-09-20 — Pillix pharmacy adapter
 
