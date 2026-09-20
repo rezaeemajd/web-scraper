@@ -49,14 +49,19 @@
 - lifecycle کامل fake HTTP client
 - مقایسه Decimal با Decimal
 
-**CI جدید بعد از این commitها هنوز PASS اعلام نشده؛ باید یک اجرای جدید GitHub Actions مشاهده شود.**
+**آخرین CI برای head قبلی هنوز 4 failure داشت (64 pass). هر 4 مورد root-cause بررسی شد؛ اصلاحات جدید روی head فعلی اعمال شده و اجرای CI جدید هنوز در GitHub ظاهر نشده است.**
 
 ## اصلاحات آخر این مرحله
 
 - dedup اکنون در نبود metadata بلاکینگ، fallback محدود از payload دارد و از zero-candidate خاموش جلوگیری می‌کند.
 - extraction موتور اکنون label-table و regex field را پشتیبانی می‌کند؛ بنابراین ساختار واقعی جدول‌های Pillix مستقیماً قابل استخراج است.
+- API list pagination اکنون ordering پایدار دارد و warningهای QuerySet unordered رفع شده‌اند.
 - benchmark پیش‌فرض به دو صفحه واقعی Gardasil 9 گسترش یافته است: med-mivz و med-bhl4.
 - این دو variant عمداً برای سنجش identity در برابر duplicate استفاده می‌شوند؛ تفاوت تولیدکننده/کشور/بسته‌بندی نباید به collapse خودکار منجر شود.
+
+## CI: آخرین root-cause analysis
+
+Run 35496176579 روی head قبلی: migration و makemigrations سالم بودند؛ 64 تست pass و 4 تست fail شدند. دو failure مربوط به dedup به threshold 0.70 در رکوردهای sparse برمی‌گشت؛ threshold عملیاتی برای candidate discovery به 0.65 تنظیم و تست symmetry اضافه شد. یک failure مربوط به ترتیب redirect بود: قبل از DNS، cross-domain باید reject شود؛ ترتیب امن اصلاح شد. یک failure مربوط به mock اشتباه rate-limit بود؛ تست اکنون semantics واقعی fixed-window را مدل می‌کند (cache.add=false و increment بالاتر از limit). سه warning pagination نیز با ordering صریح API اصلاح شد.
 
 ## Benchmark واقعی بازار ایران
 
