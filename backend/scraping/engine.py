@@ -154,8 +154,8 @@ def _next_page_url(config, html, current_url):
     )
 
 
-def _extract_page(config, html, current_url):
-    """Parse a fetched page once for both extraction and pagination."""
+def _iter_page_items(config, html, current_url, capture, source_domain):
+    """Parse one page once and yield extraction items without page-wide lists."""
     tree = LexborHTMLParser(html)
     record_selector = config.get("record_selector")
     if record_selector:
@@ -168,22 +168,23 @@ def _extract_page(config, html, current_url):
     else:
         nodes = [tree]
 
-    payloads = []
-    evidences = []
-    for index, node in enumerate(nodes):
-        payload, evidence = _extract_payload(
-            node,
-            config["fields"],
-            evidence_prefix=f"record:{index}" if record_selector else "",
-        )
-        payloads.append(payload)
-        evidences.append(evidence)
+    def iterator():
+        for index, node in enumerate(nodes):
+            payload, evidence = _extract_payload(
+                node,
+                config["fields"],
+                evidence_prefix=f"record:{index}" if record_selector else "",
+            )
+            yield {
+                "url": current_url,
+                "payload": payload,
+                "raw_capture": capture,
+                "evidence": evidence,
+                "source_domain": source_domain,
+            }
 
-    return (
-        payloads,
-        evidences,
-        _next_page_url_from_tree(config, tree, current_url),
-    )
+    return tree, iterator()
+
 
 
 def _batched(items, size):
@@ -227,21 +228,13 @@ def execute_many(scraper: Scraper, *, collect_records=True):
             if capture.status != capture.Status.SUCCESS:
                 break
 
-            payloads, evidences, next_url = _extract_page(
+            tree, page_items = _iter_page_items(
                 config,
                 capture.body,
                 current_url,
+                capture,
+                scraper.source.domain,
             )
-            page_items = [
-                {
-                    "url": current_url,
-                    "payload": payload,
-                    "raw_capture": capture,
-                    "evidence": evidence,
-                    "source_domain": scraper.source.domain,
-                }
-                for payload, evidence in zip(payloads, evidences)
-            ]
             for batch in _batched(page_items, _RECORD_BATCH_SIZE):
                 persisted = process_records(
                     entity_type=scraper.entity_type,
@@ -253,6 +246,7 @@ def execute_many(scraper: Scraper, *, collect_records=True):
                 if collect_records:
                     records.extend(persisted)
 
+            next_url = _next_page_url_from_tree(config, tree, current_url)
             if not next_url:
                 break
             current_url = next_url
