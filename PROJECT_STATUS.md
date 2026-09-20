@@ -25,9 +25,9 @@ SOURCE → DISCOVERY → FETCH → PARSE → EXTRACT → NORMALIZE → VALIDATE 
 - P1 branch: cdi-v1-p1-core-data-engine
 - PR #1: Open / Draft / Not Merged
 - PR #1 base: Foundation
-- آخرین head شناخته‌شده PR: 6c9013e41c52c5283b0a66953e7603c48f7df344
+- آخرین head شناخته‌شده PR: f3affe365f1b918b9d237aa1a0ac3d7c97bd5bce
 - PR mergeable: در آخرین بررسی GitHub، true
-- CI: اجرای موفق نهایی برای آخرین head مستند نشده؛ بنابراین PASS نهایی اعلام نمی‌شود.
+- CI: روی head قبلی 6540ce7 یک شکست مشخص در `makemigrations --check` ثبت شد؛ علت اختلاف نام خودکار indexهای Pharmacy/MarketObservation با migration 0010 بود. این اختلاف در head جدید f3affe3 با تثبیت نام indexها اصلاح شده و CI جدید هنوز نتیجه نهایی ندارد.
 - تغییرات Foundation و Production عمداً انجام نشده‌اند.
 
 ## 🖥️ وضعیت سرور
@@ -148,6 +148,10 @@ Elasticsearch، Kafka، microservices، ML dedup و browser automation سراس�
 - داده fake برای acceptance
 - اعلام Done بدون اجرای واقعی
 
+
+## 🧪 آخرین اصلاح CI — 2026-09-20
+
+CI head `6540ce7` در مرحله `makemigrations --check --dry-run` شکست خورد و Django migration جدید `0011` برای rename شش index پیشنهاد کرد. علت، استفاده از indexهای بدون نام صریح در models در کنار نام‌های تولیدشده داخل migration `0010` بود. در head `f3affe3` نام indexهای مدل با migration موجود تثبیت شد؛ هیچ migration جدیدی عمداً ایجاد نشده است. نتیجه CI این head باید جداگانه مشاهده شود.
 
 ## 🏥 به‌روزرسانی فاز Pharmacy
 
