@@ -411,7 +411,7 @@ def test_dedup_persists_multiple_candidates_in_bulk_and_refreshes_them():
                 entity_type=entity,
                 source_url=f"https://example.com/{index}",
                 source_domain="example.com",
-                normalized_payload={"name": "A", "city": "X", "extra": str(index)},
+                normalized_payload={"name": "A", "city": "X"},
                 fingerprint=str(index + 1) * 64,
             )
         )
@@ -430,4 +430,4 @@ def test_dedup_persists_multiple_candidates_in_bulk_and_refreshes_them():
     second = find_candidates(target, limit=3)
     assert len(second) == 3
     assert all(candidate.matched_fields == ["city", "name"] for candidate in second)
-    assert all(candidate.similarity == "0.6667" for candidate in second) is False
+    assert all(candidate.similarity == "1.0000" for candidate in second)
