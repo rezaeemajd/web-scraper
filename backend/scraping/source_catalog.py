@@ -1,4 +1,4 @@
-"""Curated public-source seeds for CDI discovery.
+""""Curated public-source seeds for CDI discovery.
 
 This is intentionally source-first: CDI must discover and crawl across multiple
 independent domains, not treat one URL as the market. Seeds are only entry
@@ -44,7 +44,7 @@ SOURCE_SEEDS = [
         "base_url": "https://dr-koja.ir",
         "seeds": ["https://dr-koja.ir/drugs"],
         "capabilities": ["drug", "doctor", "clinic"],
-        "adapter": "generic",
+        "adapter": "dr_koja",
     },
     {
         "key": "boroshor",
@@ -56,3 +56,4 @@ SOURCE_SEEDS = [
         "adapter": "generic",
     },
 ]
+"
