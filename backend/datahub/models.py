@@ -20,7 +20,11 @@ class ExtractedRecord(models.Model):
         indexes=[
             models.Index(fields=["entity_type","status"]),
             models.Index(fields=["source_domain","collected_at"]),
-            GinIndex(fields=["normalized_payload"], name="record_norm_payload_gin"),
+            GinIndex(
+                fields=["normalized_payload"],
+                name="record_norm_payload_path_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
         ]
         constraints=[models.UniqueConstraint(fields=["entity_type","fingerprint"],condition=~Q(fingerprint=""),name="uniq_entity_record_fingerprint")]
 class DedupCandidate(models.Model):
