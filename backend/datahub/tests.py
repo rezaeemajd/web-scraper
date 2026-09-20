@@ -431,3 +431,42 @@ def test_dedup_persists_multiple_candidates_in_bulk_and_refreshes_them():
     assert len(second) == 3
     assert all(candidate.matched_fields == ["city", "name"] for candidate in second)
     assert all(candidate.similarity == "1.0000" for candidate in second)
+
+
+@pytest.mark.django_db
+def test_process_records_preserves_repeat_observations_without_mutating_canonical_record():
+    from .models import RawCapture, RecordObservation
+
+    entity = EntityType.objects.create(name="داروی مشاهده", slug="drug-observation")
+    capture1 = RawCapture.objects.create(
+        url="https://example.com/drug",
+        body="<html>old</html>",
+        body_sha256="1" * 64,
+    )
+    capture2 = RawCapture.objects.create(
+        url="https://example.com/drug",
+        body="<html>new</html>",
+        body_sha256="2" * 64,
+    )
+
+    first = process_record(
+        entity_type=entity,
+        url="https://example.com/drug",
+        payload={"name": "دارو", "price": "100"},
+        raw_capture=capture1,
+        evidence=[{"field": "name", "value": "دارو"}],
+    )
+    second = process_record(
+        entity_type=entity,
+        url="https://example.com/drug",
+        payload={"name": "دارو", "price": "120"},
+        raw_capture=capture2,
+        evidence=[{"field": "price", "value": "120"}],
+    )
+
+    assert first.pk == second.pk
+    first.refresh_from_db()
+    assert first.normalized_payload["price"] == "100"
+    observations = RecordObservation.objects.filter(record=first).order_by("id")
+    assert observations.count() == 2
+    assert observations.last().normalized_payload["price"] == "120"
