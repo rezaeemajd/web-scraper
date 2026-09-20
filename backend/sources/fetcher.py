@@ -143,13 +143,13 @@ def _request_with_safe_redirects(source: Source, url: str, client=None):
         )
     try:
         for _ in range(_MAX_REDIRECTS + 1):
-            _assert_public_url(current_url)
             if not _same_domain(source, current_url):
                 raise FetchBlocked(
                     "redirected outside source domain"
                     if redirected
                     else "url is outside source domain"
                 )
+            _assert_public_url(current_url)
 
             with client.stream("GET", current_url) as response:
                 if response.status_code not in {301, 302, 303, 307, 308}:
