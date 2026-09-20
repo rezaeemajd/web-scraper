@@ -100,8 +100,8 @@ class Pharmacy(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["source_domain", "name"]),
-            models.Index(fields=["location", "active"]),
+            models.Index(fields=["source_domain", "name"], name="datahub_phar_source__4b7b5f_idx"),
+            models.Index(fields=["location", "active"], name="datahub_phar_locatio_9e53f1_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -158,10 +158,10 @@ class MarketObservation(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["record", "-observed_at"]),
-            models.Index(fields=["pharmacy", "-observed_at"]),
-            models.Index(fields=["source_domain", "-observed_at"]),
-            models.Index(fields=["availability", "-observed_at"]),
+            models.Index(fields=["record", "-observed_at"], name="datahub_mark_record__8e8e0d_idx"),
+            models.Index(fields=["pharmacy", "-observed_at"], name="datahub_mark_pharmac_5b8d6d_idx"),
+            models.Index(fields=["source_domain", "-observed_at"], name="datahub_mark_source__2e2f39_idx"),
+            models.Index(fields=["availability", "-observed_at"], name="datahub_mark_availab_0cda48_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
