@@ -1,4 +1,4 @@
-""""Curated public-source seeds for CDI discovery.
+"""Curated public-source seeds for CDI discovery.
 
 This is intentionally source-first: CDI must discover and crawl across multiple
 independent domains, not treat one URL as the market. Seeds are only entry
@@ -55,5 +55,13 @@ SOURCE_SEEDS = [
         "capabilities": ["drug", "leaflet", "manufacturer"],
         "adapter": "generic",
     },
+    {
+        "key": "darukade",
+        "name": "Darukade",
+        "domain": "darukade.com",
+        "base_url": "https://darukade.com",
+        "seeds": ["https://darukade.com/products"],
+        "capabilities": ["retail_product", "retail_price", "brand", "pharmacy"],
+        "adapter": "darukade",
+    },
 ]
-"
