@@ -526,3 +526,63 @@ def test_identifier_fields_create_distinct_canonical_entities():
 
     assert first.pk != second.pk
     assert ExtractedRecord.objects.filter(entity_type=entity).count() == 2
+
+
+@pytest.mark.django_db
+def test_observation_change_history_detects_only_mutated_fields():
+    from .models import RawCapture, RecordChange, RecordObservation
+
+    entity = EntityType.objects.create(name="قیمت دارو", slug="drug-change")
+    EntityField.objects.create(entity_type=entity, name="کد", slug="code", is_identifier=True)
+    EntityField.objects.create(entity_type=entity, name="قیمت", slug="price")
+    EntityField.objects.create(entity_type=entity, name="موجودی", slug="stock")
+
+    first_capture = RawCapture.objects.create(url="https://example.com/drug", body="one")
+    second_capture = RawCapture.objects.create(url="https://example.com/drug", body="two")
+
+    first = process_record(
+        entity_type=entity,
+        url="https://example.com/drug",
+        payload={"code": "D-1", "price": "100", "stock": 10},
+        raw_capture=first_capture,
+    )
+    second = process_record(
+        entity_type=entity,
+        url="https://example.com/drug",
+        payload={"code": "D-1", "price": "120", "stock": 10},
+        raw_capture=second_capture,
+    )
+
+    assert first.pk == second.pk
+    change = RecordChange.objects.get(record=first)
+    assert change.changed_fields == ["price"]
+    assert change.before == {"price": "100"}
+    assert change.after == {"price": "120"}
+    assert change.previous_observation_id != change.observation_id
+    assert RecordObservation.objects.filter(record=first).count() == 2
+
+
+@pytest.mark.django_db
+def test_identical_observation_does_not_create_change_event():
+    from .models import RawCapture, RecordChange
+
+    entity = EntityType.objects.create(name="رکورد بدون تغییر", slug="no-change")
+    EntityField.objects.create(entity_type=entity, name="کد", slug="code", is_identifier=True)
+
+    first_capture = RawCapture.objects.create(url="https://example.com/a", body="one")
+    second_capture = RawCapture.objects.create(url="https://example.com/a", body="two")
+
+    process_record(
+        entity_type=entity,
+        url="https://example.com/a",
+        payload={"code": "A-1", "name": "X"},
+        raw_capture=first_capture,
+    )
+    record = process_record(
+        entity_type=entity,
+        url="https://example.com/a",
+        payload={"code": "A-1", "name": "X"},
+        raw_capture=second_capture,
+    )
+
+    assert RecordChange.objects.filter(record=record).count() == 0
