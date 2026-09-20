@@ -75,3 +75,97 @@ class ReviewTask(models.Model):
 class AuditEvent(models.Model):
     actor=models.ForeignKey("auth.User",on_delete=models.SET_NULL,null=True,blank=True); action=models.CharField(max_length=100); entity=models.CharField(max_length=100); object_id=models.CharField(max_length=100); before=models.JSONField(default=dict,blank=True); after=models.JSONField(default=dict,blank=True); metadata=models.JSONField(default=dict,blank=True); created_at=models.DateTimeField(auto_now_add=True)
     class Meta: ordering=["-created_at"]
+
+
+class Pharmacy(models.Model):
+    name = models.CharField(max_length=255)
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pharmacies",
+    )
+    source_url = models.URLField(max_length=2000)
+    source_domain = models.CharField(max_length=255, db_index=True)
+    canonical_key = models.CharField(max_length=255, db_index=True, blank=True)
+    pharmacy_type = models.CharField(max_length=120, blank=True)
+    service_hours = models.CharField(max_length=255, blank=True)
+    public_phone = models.CharField(max_length=64, blank=True)
+    website = models.URLField(max_length=2000, blank=True)
+    evidence = models.JSONField(default=list, blank=True)
+    active = models.BooleanField(default=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["source_domain", "name"]),
+            models.Index(fields=["location", "active"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_domain", "source_url"],
+                name="uniq_pharmacy_source_url",
+            ),
+        ]
+
+
+class MarketObservation(models.Model):
+    class Availability(models.TextChoices):
+        LISTED = "listed", "Listed"
+        AVAILABLE = "available", "Available"
+        UNAVAILABLE = "unavailable", "Unavailable"
+        NOT_STATED = "not_stated", "Not stated"
+        UNKNOWN = "unknown", "Unknown"
+
+    pharmacy = models.ForeignKey(
+        Pharmacy,
+        on_delete=models.CASCADE,
+        related_name="market_observations",
+    )
+    record = models.ForeignKey(
+        ExtractedRecord,
+        on_delete=models.CASCADE,
+        related_name="market_observations",
+    )
+    raw_capture = models.ForeignKey(
+        RawCapture,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="market_observations",
+    )
+    source_url = models.URLField(max_length=2000)
+    source_domain = models.CharField(max_length=255, db_index=True)
+    availability = models.CharField(
+        max_length=20,
+        choices=Availability.choices,
+        default=Availability.UNKNOWN,
+    )
+    price = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    price_currency = models.CharField(max_length=12, blank=True)
+    price_text = models.CharField(max_length=255, blank=True)
+    quantity = models.PositiveIntegerField(null=True, blank=True)
+    evidence = models.JSONField(default=list, blank=True)
+    observed_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["record", "-observed_at"]),
+            models.Index(fields=["pharmacy", "-observed_at"]),
+            models.Index(fields=["source_domain", "-observed_at"]),
+            models.Index(fields=["availability", "-observed_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pharmacy", "record", "source_url", "observed_at"],
+                name="uniq_market_observation_point",
+            ),
+        ]
