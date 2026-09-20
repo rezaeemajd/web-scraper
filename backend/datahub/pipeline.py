@@ -173,7 +173,34 @@ def process_records(
             )
         })
 
-    return [existing[values["fingerprint"]] for values in values_list]
+    resolved = [existing[values["fingerprint"]] for values in values_list]
+
+    # Preserve every scrape observation without mutating the canonical record.
+    # RawCapture is the immutable page-level provenance anchor.
+    from .models import RecordObservation
+
+    observations = [
+        RecordObservation(
+            record=record,
+            raw_capture=values["raw_capture"],
+            source_url=values["source_url"],
+            source_domain=values["source_domain"],
+            payload=values["payload"],
+            normalized_payload=values["normalized_payload"],
+            evidence=values["evidence"],
+            fingerprint=values["fingerprint"],
+        )
+        for record, values in zip(resolved, values_list)
+        if values["raw_capture"] is not None
+    ]
+    if observations:
+        RecordObservation.objects.bulk_create(
+            observations,
+            batch_size=max(1, int(batch_size)),
+            ignore_conflicts=True,
+        )
+
+    return resolved
 
 
 def process_record(
