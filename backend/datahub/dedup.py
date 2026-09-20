@@ -10,17 +10,27 @@ _MAX_CANDIDATE_SCAN = 1000
 
 
 def similarity(a, b):
-    keys = set(a) & set(b)
+    """Return Jaccard-like field similarity over the union of populated keys.
+
+    Empty values are excluded from the denominator. This keeps the score
+    symmetric and penalizes records that contain additional conflicting fields,
+    while still ignoring fields that neither side actually populated.
+    """
+    keys = set(a) | set(b)
     comparable = [
-        k for k in keys
-        if a.get(k) not in (None, "") or b.get(k) not in (None, "")
+        key
+        for key in keys
+        if a.get(key) not in (None, "") or b.get(key) not in (None, "")
     ]
     if not comparable:
         return Decimal("0.0000"), []
 
     matches = [
-        k for k in comparable
-        if a.get(k) not in (None, "") and a.get(k) == b.get(k)
+        key
+        for key in comparable
+        if a.get(key) not in (None, "")
+        and b.get(key) not in (None, "")
+        and a.get(key) == b.get(key)
     ]
     return Decimal(str(round(len(matches) / len(comparable), 4))), sorted(matches)
 
@@ -61,7 +71,6 @@ def _candidate_queryset(record, blocks=None):
         .order_by("pk")
     )
 
-    # Empty fingerprints are intentionally not treated as an idempotency key.
     if record.fingerprint:
         base = base.exclude(fingerprint=record.fingerprint)
 
@@ -69,8 +78,6 @@ def _candidate_queryset(record, blocks=None):
     if not blocks:
         return base
 
-    # Block first on searchable, non-empty fields. This turns the common case
-    # from an O(N) Python scan into JSONB containment filtering in PostgreSQL.
     condition = Q()
     score_terms = []
     for key, value in blocks:
@@ -91,9 +98,6 @@ def _candidate_queryset(record, blocks=None):
     for term in score_terms[1:]:
         block_score = block_score + term
 
-    # A bounded candidate set prevents a common value (for example, a generic
-    # clinic name) from causing an unbounded Python similarity scan. Candidates
-    # are ranked by the number of blocking-field matches before the final score.
     return (
         base.filter(condition)
         .annotate(_block_score=block_score)
@@ -123,9 +127,6 @@ def find_candidates(record, limit=20):
     if not matches:
         return []
 
-    # Resolve existing candidates in one query instead of get_or_create() once
-    # per match. This is important when one source page produces many near
-    # duplicates: DB round-trips now scale with batches, not candidate count.
     pairs = [(left_id, right_id) for left_id, right_id, _, _ in matches]
     existing = {
         (candidate.record_a_id, candidate.record_b_id): candidate
@@ -161,8 +162,6 @@ def find_candidates(record, limit=20):
             batch_size=min(100, len(to_create)),
             ignore_conflicts=True,
         )
-        # A concurrent worker may have won the unique pair race. Re-read all
-        # requested pairs so the returned objects always represent DB state.
         existing.update({
             (candidate.record_a_id, candidate.record_b_id): candidate
             for candidate in DedupCandidate.objects.filter(
@@ -179,6 +178,4 @@ def find_candidates(record, limit=20):
             batch_size=min(100, len(to_update)),
         )
 
-    # Preserve similarity order produced by the database scan and apply the
-    # caller's limit only after scoring, so weak early blocks do not consume it.
     return result[:limit]
