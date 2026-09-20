@@ -76,9 +76,10 @@ def process_record(
     raw_capture=None,
     evidence=None,
     source_domain=None,
+    fields=None,
 ):
     normalized = normalize_value(payload)
-    fields = list(entity_type.fields.all())
+    fields = list(fields) if fields is not None else list(entity_type.fields.all())
     errors = validate_payload(entity_type, normalized, fields=fields)
     score = quality_score(normalized, entity_type, errors, fields=fields)
     values = {
