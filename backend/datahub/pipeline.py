@@ -259,25 +259,30 @@ def process_records(
             batch_size=max(1, int(batch_size)),
             ignore_conflicts=True,
         )
-
-    changes = [
-        RecordChange(
-            record=record,
-            previous_observation=previous,
-            observation=observation,
-            changed_fields=[item["field"] for item in diff],
-            before={item["field"]: item["before"] for item in diff},
-            after={item["field"]: item["after"] for item in diff},
+        persisted = RecordObservation.objects.filter(
+            record_id__in={record.pk for record in resolved},
+            raw_capture_id__in={item.raw_capture_id for item in observations},
         )
-        for record, previous, observation, diff in change_specs
-        if observation.pk
-    ]
-    if changes:
-        RecordChange.objects.bulk_create(
-            changes,
-            batch_size=max(1, int(batch_size)),
-            ignore_conflicts=True,
-        )
+        persisted_map = {(item.record_id, item.raw_capture_id): item for item in persisted}
+        changes = []
+        for record, previous, pending, diff in change_specs:
+            current = persisted_map.get((pending.record_id, pending.raw_capture_id))
+            if current is None or current.fingerprint == previous.fingerprint:
+                continue
+            changes.append(RecordChange(
+                record=record,
+                previous_observation=previous,
+                observation=current,
+                changed_fields=[item["field"] for item in diff],
+                before={item["field"]: item["before"] for item in diff},
+                after={item["field"]: item["after"] for item in diff},
+            ))
+        if changes:
+            RecordChange.objects.bulk_create(
+                changes,
+                batch_size=max(1, int(batch_size)),
+                ignore_conflicts=True,
+            )
     return resolved
 
 def process_record(
