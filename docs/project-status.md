@@ -30,7 +30,7 @@
 - Foundation: cdi-v1-foundation @ c072da00dfce2d3c5c27b11c499a73c45343c95b
 - P1: cdi-v1-p1-core-data-engine
 - PR #1: feat: CDI P1 core data engine — OPEN / DRAFT / NOT MERGED
-- آخرین commit branch: 51a155b1c827dafd9234576462a1cc49d606d20d
+- آخرین commit branch: 09c846376e6dcc5fd0a1b84650b200ae20faf0c0
 - force-push/reset/delete نسخه‌ها ممنوع.
 
 ## CI و اصلاحات اخیر
@@ -49,7 +49,7 @@
 - lifecycle کامل fake HTTP client
 - مقایسه Decimal با Decimal
 
-**آخرین CI برای head قبلی هنوز 4 failure داشت (64 pass). هر 4 مورد root-cause بررسی شد؛ اصلاحات جدید روی head فعلی اعمال شده و اجرای CI جدید هنوز در GitHub ظاهر نشده است.**
+**آخرین CI قبل از این اصلاح روی head fd90afc722f345f97458ac9e10825ace60cfc586، 68 pass و 1 failure داشت. failure فقط از assertion قدیمی تست redirect خصوصی بود: پیاده‌سازی عمداً redirect خارج از دامنه را قبل از DNS/public-IP بررسی می‌کند تا SSRF با redirect cross-domain مسدود شود. تست با این قرارداد امنیتی هم‌راستا شد. commit اصلاحی 09c846376e6dcc5fd0a1b84650b200ae20faf0c0 است و CI جدید برای آن در حال اجراست؛ PASS نهایی هنوز ادعا نمی‌شود.**
 
 ## اصلاحات آخر این مرحله
 
@@ -62,6 +62,10 @@
 ## CI: آخرین root-cause analysis
 
 Run 35496176579 روی head قبلی: migration و makemigrations سالم بودند؛ 64 تست pass و 4 تست fail شدند. دو failure مربوط به dedup به threshold 0.70 در رکوردهای sparse برمی‌گشت؛ threshold عملیاتی برای candidate discovery به 0.65 تنظیم و تست symmetry اضافه شد. یک failure مربوط به ترتیب redirect بود: قبل از DNS، cross-domain باید reject شود؛ ترتیب امن اصلاح شد. یک failure مربوط به mock اشتباه rate-limit بود؛ تست اکنون semantics واقعی fixed-window را مدل می‌کند (cache.add=false و increment بالاتر از limit). سه warning pagination نیز با ordering صریح API اصلاح شد.
+
+## تصمیم مهندسی برای سرعت پروژه
+
+تا زمانی که CI روی head اصلاحی تأیید نشده و benchmark واقعی روی isolated stack اجرا نشده، مدل‌های Pharmacy/MarketObservation را عمداً وارد branch نمی‌کنیم؛ این کار از ساخت migration و API روی فرضیات ناقص جلوگیری می‌کند. بعد از green شدن CI، مرحله بعدی مستقیماً Pharmacy + Location + MarketObservation و سپس crawl محدود واقعی تهران/گارداسیل است؛ بدون تغییر Foundation یا Production.
 
 ## Benchmark واقعی بازار ایران
 
