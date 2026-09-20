@@ -158,7 +158,7 @@ def _batched(items, size):
         yield batch
 
 
-def execute_many(scraper: Scraper):
+def execute_many(scraper: Scraper, *, collect_records=True):
     if not scraper.entity_type:
         raise ValueError("scraper.entity_type is required")
 
@@ -169,6 +169,7 @@ def execute_many(scraper: Scraper):
     visited = set()
     records = []
     captures = []
+    record_count = 0
     entity_fields = list(scraper.entity_type.fields.all())
 
     with httpx.Client(
@@ -199,21 +200,24 @@ def execute_many(scraper: Scraper):
                 for payload, evidence in zip(payloads, evidences)
             ]
             for batch in _batched(page_items, _RECORD_BATCH_SIZE):
-                records.extend(
-                    process_records(
-                        entity_type=scraper.entity_type,
-                        items=batch,
-                        fields=entity_fields,
-                        batch_size=_RECORD_BATCH_SIZE,
-                    )
+                persisted = process_records(
+                    entity_type=scraper.entity_type,
+                    items=batch,
+                    fields=entity_fields,
+                    batch_size=_RECORD_BATCH_SIZE,
                 )
+                record_count += len(persisted)
+                if collect_records:
+                    records.extend(persisted)
 
             next_url = _next_page_url(config, capture.body, current_url)
             if not next_url:
                 break
             current_url = next_url
 
-    return records, captures
+    if collect_records:
+        return records, captures
+    return [], captures, record_count
 
 
 def execute(scraper: Scraper):
