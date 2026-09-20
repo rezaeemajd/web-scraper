@@ -56,7 +56,7 @@ class LocationViewSet(viewsets.ModelViewSet):
 
 
 class RawCaptureViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = RawCapture.objects.all()
+    queryset = RawCapture.objects.all().order_by("-fetched_at", "-id")
     serializer_class = RawCaptureSerializer
 
     def get_queryset(self):
@@ -76,7 +76,7 @@ class RawCaptureViewSet(viewsets.ReadOnlyModelViewSet):
 class ExtractedRecordViewSet(viewsets.ModelViewSet):
     queryset = ExtractedRecord.objects.select_related(
         "entity_type", "location", "raw_capture"
-    )
+    ).order_by("-collected_at", "-id")
     serializer_class = ExtractedRecordSerializer
     permission_classes = [StaffWritePermission]
     search_fields = ["source_domain", "source_url", "status", "canonical_key"]
@@ -128,7 +128,7 @@ class DedupCandidateViewSet(viewsets.ModelViewSet):
 
 
 class ReviewTaskViewSet(viewsets.ModelViewSet):
-    queryset = ReviewTask.objects.select_related("record", "assigned_to")
+    queryset = ReviewTask.objects.select_related("record", "assigned_to").order_by("-created_at", "-id")
     serializer_class = ReviewTaskSerializer
     permission_classes = [StaffWritePermission]
     filterset_fields = ["status", "assigned_to"]
@@ -157,21 +157,21 @@ class ReviewTaskViewSet(viewsets.ModelViewSet):
 
 
 class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = AuditEvent.objects.select_related("actor")
+    queryset = AuditEvent.objects.select_related("actor").order_by("-created_at", "-id")
     serializer_class = AuditEventSerializer
     permission_classes = [StaffWritePermission]
     filterset_fields = ["action", "entity", "object_id"]
 
 
 class RecordObservationViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = RecordObservation.objects.select_related("record", "raw_capture")
+    queryset = RecordObservation.objects.select_related("record", "raw_capture").order_by("-observed_at", "-id")
     serializer_class = RecordObservationSerializer
     permission_classes = [StaffWritePermission]
     filterset_fields = ["record", "source_domain"]
     ordering_fields = ["observed_at"]
 
 class RecordChangeViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = RecordChange.objects.select_related("record", "observation", "previous_observation")
+    queryset = RecordChange.objects.select_related("record", "observation", "previous_observation").order_by("-detected_at", "-id")
     serializer_class = RecordChangeSerializer
     permission_classes = [StaffWritePermission]
     filterset_fields = ["record"]
