@@ -440,3 +440,47 @@ Benchmark Gardasil اکنون حداقل سه domain مستقل را هدف می
 - PharmaWeb: commercial marketplace observation
 
 این سه منبع در یک entity معنایی واحد ادغام نمی‌شوند مگر identity evidence کافی وجود داشته باشد؛ هر مشاهده source URL، capture و زمان خود را حفظ می‌کند. Generic JSON-LD فقط در صورت وجود schema.org/Product evidence مجاز است؛ در غیر این صورت source-specific adapter لازم است.
+
+
+## 2026-09-20 — Pharmacy source-specific adapter routing
+
+### New execution path
+
+Pillix pharmacy pages are now routed by URL path to a dedicated source adapter:
+
+`Pillix /pharmacy/* → pillix_pharmacy adapter → pharmacy entity pipeline`
+
+Other Pillix paths continue using the generic adapter. This avoids treating a mixed-domain source as if one parser had identical semantics across medicine and pharmacy pages.
+
+### Pharmacy persistence contract
+
+For a pharmacy extraction:
+
+`RawCapture → pillix_pharmacy → adapter_record_to_item → process_records(pharmacy) → ExtractedRecord + RecordObservation → upsert_pharmacy_from_record → Location + Pharmacy`
+
+The adapter extracts only explicitly published directory facts:
+- pharmacy name
+- province
+- city
+- address
+- explicit pharmacy type
+
+The pipeline preserves source URL/domain, RawCapture provenance and evidence. It does **not** infer product availability or current stock from a directory listing.
+
+### Identity decision
+
+The pharmacy EntityType uses explicit geographic identity fields (name + province + city + address) for durable record identity. Mutable attributes such as type, service hours and public phone remain observation-level data and can generate changes without becoming permanent identity fields.
+
+### Operational consequence
+
+The existing Pharmacy/Location schema is reused; no new migration is required for this integration. Discovery reports both extracted/persisted records and materialized pharmacies.
+
+### Acceptance boundary
+
+This code path is ready for isolated execution, but it is not yet marked as real-data accepted. Acceptance requires an actual bounded crawl against the public Pillix pharmacy pages, followed by:
+1. dry-run rollback,
+2. persisted run,
+3. repeated run/idempotency verification,
+4. provenance inspection.
+
+No Production topology or existing Cofinets service is changed by this branch.
