@@ -7,7 +7,12 @@ This benchmark is the first real-market acceptance path for CDI. It validates th
 Current live source evidence confirms that the target page publishes:
 
 - Persian product name
-- English name / brand
+- English name
+- generic name and dosage/form fields
+- licence holder / brand owner / manufacturer
+- country and licence validity
+- package and price fields
+- ATC code
 - generic medicine name
 - dosage/form information
 - manufacturer and brand-owner information
@@ -23,12 +28,13 @@ The page identifies itself as receiving medicine information from the country's 
 
 - Source: Pillix
 - Domain: pillix.ir
-- URL: https://pillix.ir/medicine/med-mivz
+- URL A: https://pillix.ir/medicine/med-mivz
+- URL B: https://pillix.ir/medicine/med-bhl4
 - Product family: Gardasil 9 / 9-valent HPV vaccine
 - Expected entity family: medicine / vaccine
 - Expected geography: Iran
 
-The same source currently exposes more than one Gardasil-related product page. This is useful for later identity/dedup benchmarking, but the first acceptance run intentionally remains one page.
+The benchmark now fetches both real Gardasil 9 variants in one bounded run. The two pages share the product family but differ in manufacturer/country/package data, making them a real identity-vs-duplicate acceptance case.
 
 ## What CDI must prove
 
@@ -98,8 +104,8 @@ Pharmacy availability and price must be modelled as timestamped observations tie
 
 After the single Gardasil page passes:
 
-1. Compare the two currently discoverable Gardasil 9 product variants from the same source.
-2. Add source-specific structured field extraction for manufacturer, licence, ATC and package data.
+1. Verify the two real Gardasil 9 variants remain distinct canonical records while producing a dedup candidate when similarity is high.
+2. Preserve source-specific structured field evidence for manufacturer, licence, ATC, package and price data.
 3. Add a dedicated Pharmacy entity and pharmacy-location observation model.
 4. Crawl a bounded set of Gardasil pharmacy result pages, preserving source URL and observation timestamp.
 5. Validate city/province extraction.
