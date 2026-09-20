@@ -358,3 +358,34 @@ def test_raw_capture_list_omits_large_body_and_headers():
     assert detail.status_code == 200
     assert detail.data["body"] == "x" * 10000
     assert detail.data["headers"]["content-type"] == "text/html"
+
+
+@pytest.mark.django_db
+def test_record_list_omits_large_json_and_detail_keeps_it():
+    from rest_framework.test import APIClient
+
+    entity = EntityType.objects.create(name="رکورد سبک", slug="record-list-light")
+    record = ExtractedRecord.objects.create(
+        entity_type=entity,
+        source_url="https://example.com/record",
+        source_domain="example.com",
+        payload={"name": "A", "html": "x" * 5000},
+        normalized_payload={"name": "A"},
+        evidence=[{"field": "name", "value": "A"}],
+        validation_errors=[{"field": "x", "code": "required"}],
+        fingerprint="7" * 64,
+    )
+
+    client = APIClient()
+    response = client.get("/api/v1/records/")
+    assert response.status_code == 200
+    item = next(row for row in response.data["results"] if row["id"] == record.pk)
+    assert "payload" not in item
+    assert "normalized_payload" not in item
+    assert "evidence" not in item
+    assert "validation_errors" not in item
+
+    detail = client.get(f"/api/v1/records/{record.pk}/")
+    assert detail.status_code == 200
+    assert detail.data["payload"]["html"] == "x" * 5000
+    assert detail.data["normalized_payload"]["name"] == "A"
