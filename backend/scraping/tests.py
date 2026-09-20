@@ -709,3 +709,56 @@ def test_scraper_lock_refresh_requires_same_token():
     lost = FakeRedis(0)
     with pytest.raises(tasks.DuplicateScraperRun, match="lock lease was lost"):
         tasks._refresh_scraper_lock(lost, "lock:key", "token")
+
+
+def test_pillix_pharmacy_route_selects_source_specific_adapter():
+    from scraping.management.commands.cdi_source_discovery import Command
+
+    item = {
+        "adapter": "generic",
+        "adapter_routes": [
+            {
+                "prefix": "/pharmacy/",
+                "adapter": "pillix_pharmacy",
+                "entity_type": "pharmacy",
+            }
+        ],
+    }
+
+    adapter, entity_type = Command._adapter_config(
+        item,
+        "https://pillix.ir/pharmacy/county-tehran",
+    )
+
+    assert adapter == "pillix_pharmacy"
+    assert entity_type == "pharmacy"
+
+
+def test_pillix_pharmacy_adapter_extracts_explicit_directory_facts():
+    from scraping.adapters.pillix_pharmacy import extract_pharmacies
+
+    html = """
+    <section>
+      <h2>داروخانه دکتر حسن</h2>
+      <div>
+        داروخانه شبانه‌روزی
+        استان: تهران
+        شهرستان: تهران
+        آدرس: تهران، خیابان نمونه
+      </div>
+    </section>
+    """
+
+    records = extract_pharmacies(
+        html,
+        "https://pillix.ir/pharmacy/county-tehran",
+    )
+
+    assert records == [{
+        "name": "داروخانه دکتر حسن",
+        "province": "تهران",
+        "city": "تهران",
+        "address": "تهران، خیابان نمونه",
+        "pharmacy_type": "داروخانه شبانه‌روزی",
+        "source_url": "https://pillix.ir/pharmacy/county-tehran",
+    }]
