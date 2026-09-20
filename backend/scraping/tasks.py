@@ -118,14 +118,14 @@ def run_scraper(self, scraper_id):
                 run.records_extracted = record_count
                 run.save(update_fields=["pages_fetched", "records_extracted"])
 
-            _, _, record_count = execute_many(
+            _, captures, record_count = execute_many(
                 locked_scraper,
                 collect_records=False,
                 collect_captures=False,
                 progress_callback=on_progress,
             )
             run.records_extracted = record_count
-            capture = last_capture
+            capture = last_capture or (captures[-1] if captures else None)
             if capture is None:
                 raise RuntimeError("scraper produced no capture")
             run.status = (
