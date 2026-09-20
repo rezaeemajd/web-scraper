@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urljoin
 
 import httpx
@@ -21,9 +22,13 @@ def validate_extraction_config(config):
     if not isinstance(config, dict):
         raise ScraperConfigError("extraction_config must be an object")
 
-    fields = config.get("fields")
-    if not isinstance(fields, dict) or not fields:
-        raise ScraperConfigError("extraction_config.fields must be a non-empty object")
+    fields = config.get("fields") or {}
+    label_table = config.get("label_table") or {}
+    regex_fields = config.get("regex_fields") or {}
+    if not isinstance(fields, dict) or not isinstance(label_table, dict) or not isinstance(regex_fields, dict):
+        raise ScraperConfigError("fields, label_table and regex_fields must be objects")
+    if not fields and not label_table and not regex_fields:
+        raise ScraperConfigError("extraction_config needs fields, label_table or regex_fields")
 
     for field, selector in fields.items():
         if not isinstance(field, str) or not field.strip():
@@ -32,6 +37,24 @@ def validate_extraction_config(config):
             raise ScraperConfigError(
                 f"selector for {field!r} must be a non-empty string"
             )
+
+    for field, labels in label_table.items():
+        if not isinstance(field, str) or not field.strip():
+            raise ScraperConfigError("label_table field names must be non-empty strings")
+        if isinstance(labels, str):
+            labels = [labels]
+        if not isinstance(labels, list) or not labels or any(not isinstance(label, str) or not label.strip() for label in labels):
+            raise ScraperConfigError(f"label_table for {field!r} must be a non-empty list of strings")
+
+    for field, spec in regex_fields.items():
+        if not isinstance(field, str) or not field.strip() or not isinstance(spec, dict):
+            raise ScraperConfigError("regex_fields entries must be objects")
+        if not isinstance(spec.get("pattern"), str) or not spec["pattern"].strip():
+            raise ScraperConfigError(f"regex pattern for {field!r} must be a non-empty string")
+        try:
+            re.compile(spec["pattern"])
+        except re.error as exc:
+            raise ScraperConfigError(f"invalid regex for {field!r}: {exc}") from exc
 
     record_selector = config.get("record_selector")
     if record_selector is not None and (
@@ -60,27 +83,66 @@ def validate_extraction_config(config):
     return config
 
 
-def _extract_payload(node, fields, evidence_prefix=""):
+def _clean_label(value):
+    return re.sub(r"\\s+", " ", value or "").strip().rstrip(":").strip()
+
+
+def _extract_payload(node, fields, label_table=None, regex_fields=None, evidence_prefix=""):
     payload = {}
     evidence = []
+
     for field, selector in fields.items():
         try:
             match = node.css_first(selector)
         except Exception as exc:
-            raise ScraperConfigError(
-                f"invalid CSS selector for {field!r}: {exc}"
-            ) from exc
-
+            raise ScraperConfigError(f"invalid CSS selector for {field!r}: {exc}") from exc
         value = match.text(strip=True) if match else ""
         payload[field] = value
-        item = {
-            "field": field,
-            "selector": selector,
-            "value": value,
-        }
+        item = {"field": field, "selector": selector, "value": value}
         if evidence_prefix:
             item["scope"] = evidence_prefix
         evidence.append(item)
+
+    for field, labels in (label_table or {}).items():
+        if isinstance(labels, str):
+            labels = [labels]
+        wanted = {_clean_label(label): field for label in labels}
+        value = ""
+        matched_label = ""
+        try:
+            rows = node.css("tr")
+        except Exception as exc:
+            raise ScraperConfigError(f"failed to inspect label_table rows: {exc}") from exc
+        for row in rows:
+            cells = row.css("th, td")
+            if len(cells) < 2:
+                continue
+            label = _clean_label(cells[0].text(strip=True))
+            if label in wanted:
+                value = cells[1].text(strip=True)
+                matched_label = label
+                break
+        payload[field] = value
+        item = {"field": field, "selector": "label_table", "label": matched_label, "value": value}
+        if evidence_prefix:
+            item["scope"] = evidence_prefix
+        evidence.append(item)
+
+    for field, spec in (regex_fields or {}).items():
+        selector = spec.get("selector", "body")
+        try:
+            target = node.css_first(selector)
+        except Exception as exc:
+            raise ScraperConfigError(f"invalid regex selector for {field!r}: {exc}") from exc
+        text = target.text(strip=True) if target else ""
+        match = re.search(spec["pattern"], text, flags=re.IGNORECASE)
+        value = match.group(1) if match and match.lastindex else (match.group(0) if match else "")
+        payload[field] = value.strip()
+        item = {"field": field, "selector": selector, "pattern": spec["pattern"], "value": payload[field]}
+        if evidence_prefix:
+            item["scope"] = evidence_prefix
+        evidence.append(item)
+
     return payload, evidence
 
 
@@ -103,7 +165,9 @@ def _extract_static_html_many(config, html):
     for index, node in enumerate(nodes):
         payload, evidence = _extract_payload(
             node,
-            config["fields"],
+            config.get("fields") or {},
+            label_table=config.get("label_table"),
+            regex_fields=config.get("regex_fields"),
             evidence_prefix=f"record:{index}" if record_selector else "",
         )
         payloads.append(payload)
