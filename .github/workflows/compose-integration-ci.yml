@@ -1,0 +1,74 @@
+name: CDI Compose Integration CI
+
+on:
+  push:
+    branches: [cdi-v1-p1-core-data-engine]
+  pull_request:
+    branches: [cdi-v1-foundation]
+
+jobs:
+  compose-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create CI environment
+        run: |
+          cat > .env <<'EOF'
+          DJANGO_SECRET_KEY=ci-only-secret
+          DEBUG=False
+          ALLOWED_HOSTS=localhost,127.0.0.1
+          CORS_ALLOWED_ORIGINS=http://localhost:3001
+          CDI_NETWORK_NAME=cdi-ci-network
+          POSTGRES_DB=cdi
+          POSTGRES_USER=cdi
+          POSTGRES_PASSWORD=ci-only-password
+          POSTGRES_HOST=db
+          POSTGRES_PORT=5432
+          REDIS_URL=redis://redis:6379/0
+          CELERY_BROKER_URL=redis://redis:6379/0
+          CELERY_RESULT_BACKEND=redis://redis:6379/1
+          EOF
+
+      - name: Validate Compose configuration
+        run: docker compose config -q
+
+      - name: Start backend stack
+        run: docker compose up -d db redis backend worker beat frontend
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8001/health/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs backend
+          exit 1
+
+      - name: Run migrations
+        run: docker compose exec -T backend python manage.py migrate --noinput
+
+      - name: Check readiness
+        run: curl -fsS http://127.0.0.1:8001/ready/
+
+      - name: Check Celery worker
+        run: docker compose exec -T backend celery -A config inspect ping --timeout=10
+
+      - name: Check frontend
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs frontend
+          exit 1
+
+      - name: Stop integration stack
+        if: always()
+        run: docker compose down -v
