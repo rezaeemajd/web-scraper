@@ -390,3 +390,25 @@ def test_extract_static_html_many_uses_record_scope_only_for_multi_record_config
     assert payloads == [{"name": "A"}, {"name": "B"}]
     assert evidences[0][0]["scope"] == "record:0"
     assert evidences[1][0]["scope"] == "record:1"
+
+
+@pytest.mark.django_db
+def test_stale_running_scraper_run_is_recovered():
+    from datetime import timedelta
+    from django.utils import timezone
+    from scraping.tasks import _recover_stale_run
+    from scraping.models import ScraperRun
+
+    scraper = Scraper.objects.first()
+    if scraper is None:
+        pytest.skip("requires scraper fixture")
+    old = timezone.now() - timedelta(minutes=60)
+    run = ScraperRun.objects.create(
+        scraper=scraper,
+        status=ScraperRun.Status.RUNNING,
+        started_at=old,
+    )
+    _recover_stale_run(scraper.pk)
+    run.refresh_from_db()
+    assert run.status == ScraperRun.Status.FAILED
+    assert "lease expired" in run.error_message
