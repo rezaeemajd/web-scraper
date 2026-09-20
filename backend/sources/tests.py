@@ -195,7 +195,7 @@ def test_capture_url_blocks_private_redirect(monkeypatch):
     capture = fetcher.capture_url(source, "https://example.com/page")
 
     assert capture.status == RawCapture.Status.BLOCKED
-    assert "non-public" in capture.error_message
+    assert "outside source domain" in capture.error_message
 
 
 @pytest.mark.django_db
