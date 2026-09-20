@@ -110,6 +110,8 @@ def find_candidates(record, limit=20):
         if score >= _MIN_SIMILARITY:
             left, right = sorted((record, other), key=lambda item: item.pk)
             matches.append((left.pk, right.pk, score, fields))
+            if len(matches) >= limit:
+                break
 
     if not matches:
         return []
