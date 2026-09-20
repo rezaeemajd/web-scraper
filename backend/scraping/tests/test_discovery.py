@@ -18,9 +18,12 @@ def test_extract_same_domain_links_filters_external_and_fragments():
     <a href="https://other.example/x">external</a>
     <a href="mailto:test@example.com">mail</a>
     """
-    assert extract_same_domain_links(
-        html, "https://example.com/", "example.com"
-    ) == [
+    links = extract_same_domain_links(
+        html,
+        "https://example.com/",
+        "example.com",
+    )
+    assert links == [
         "https://example.com/medicine/1",
         "https://example.com/pharmacy/2",
     ]
@@ -40,7 +43,7 @@ def test_bounded_discovery_is_breadth_first_and_capped():
             status="success",
             body='<a href="/d">d</a>',
         ),
-    )
+    }
 
     class Source:
         base_url = "https://example.com"
