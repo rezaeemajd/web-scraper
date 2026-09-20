@@ -51,6 +51,13 @@
 
 **CI جدید بعد از این commitها هنوز PASS اعلام نشده؛ باید یک اجرای جدید GitHub Actions مشاهده شود.**
 
+## اصلاحات آخر این مرحله
+
+- dedup اکنون در نبود metadata بلاکینگ، fallback محدود از payload دارد و از zero-candidate خاموش جلوگیری می‌کند.
+- extraction موتور اکنون label-table و regex field را پشتیبانی می‌کند؛ بنابراین ساختار واقعی جدول‌های Pillix مستقیماً قابل استخراج است.
+- benchmark پیش‌فرض به دو صفحه واقعی Gardasil 9 گسترش یافته است: med-mivz و med-bhl4.
+- این دو variant عمداً برای سنجش identity در برابر duplicate استفاده می‌شوند؛ تفاوت تولیدکننده/کشور/بسته‌بندی نباید به collapse خودکار منجر شود.
+
 ## Benchmark واقعی بازار ایران
 
 منبع اصلی: Pillix، صفحه واقعی Gardasil 9:
@@ -84,7 +91,7 @@ Django + PostgreSQL + Redis + Celery + HTTPX + Selectolax/Lexbor؛ bounded fetch
 ## ترتیب ادامه
 
 1. یک بار CI جدید را بررسی و failure واقعی را root-cause fix کنیم.
-2. روی isolated CDI stack: Gardasil dry-run و سپس persist واقعی.
+2. روی isolated CDI stack: benchmark دو صفحه واقعی Gardasil را dry-run و سپس persist کنیم.
 3. مقایسه واقعی دو صفحه Gardasil و identity/dedup.
 4. extraction ساختاری manufacturer/country/licence/package/ATC/price با evidence.
 5. Pharmacy + Location + MarketObservation.
