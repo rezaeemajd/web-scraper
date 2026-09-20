@@ -31,9 +31,16 @@ def _blocking_fields(record):
     fields = list(
         EntityField.objects.filter(
             entity_type=record.entity_type,
-            searchable=True,
+            is_blocking=True,
         ).values_list("slug", "name")
     )
+    if not fields:
+        fields = list(
+            EntityField.objects.filter(
+                entity_type=record.entity_type,
+                searchable=True,
+            ).values_list("slug", "name")
+        )
     blocks = []
     for slug, name in fields:
         for key in (slug, name):
