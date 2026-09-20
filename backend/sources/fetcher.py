@@ -114,15 +114,18 @@ def _capture_robots(source: Source, robots_url: str):
         pass
     return rp
 
-def _request_with_safe_redirects(source: Source, url: str):
+def _request_with_safe_redirects(source: Source, url: str, client=None):
     current_url = url
     redirected = False
-    with httpx.Client(
-        timeout=httpx.Timeout(20.0, connect=10.0),
-        follow_redirects=False,
-        trust_env=False,
-        headers={"User-Agent": source.user_agent},
-    ) as client:
+    owns_client = client is None
+    if owns_client:
+        client = httpx.Client(
+            timeout=httpx.Timeout(20.0, connect=10.0),
+            follow_redirects=False,
+            trust_env=False,
+            headers={"User-Agent": source.user_agent},
+        )
+    try:
         for _ in range(_MAX_REDIRECTS + 1):
             _assert_public_url(current_url)
             if not _same_domain(source, current_url):
@@ -167,9 +170,13 @@ def _request_with_safe_redirects(source: Source, url: str):
                 current_url = urljoin(current_url, location)
                 redirected = True
 
-    raise FetchBlocked("too many redirects")
+        raise FetchBlocked("too many redirects")
+    finally:
+        if owns_client:
+            client.close()
 
-def capture_url(source: Source, url: str) -> RawCapture:
+
+def capture_url(source: Source, url: str, *, client=None) -> RawCapture:
     if not source.allowed or source.status != Source.Status.ACTIVE:
         raise FetchBlocked("source is not active")
     if not _same_domain(source, url):
@@ -189,7 +196,7 @@ def capture_url(source: Source, url: str) -> RawCapture:
 
     try:
         _rate_limit(source)
-        response, final_url = _request_with_safe_redirects(source, url)
+        response, final_url = _request_with_safe_redirects(source, url, client=client)
         try:
             # _request_with_safe_redirects already bounded and buffered the body.
             # Reusing response.content avoids a second in-memory streaming pass.
