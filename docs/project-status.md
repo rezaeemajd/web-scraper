@@ -131,3 +131,18 @@ Production/Cofinets/Nginx دستکاری نشود؛ Foundation merge نشود ت
 - During code review of the same path, a real extraction bug was found: `execute_many()` passed only CSS `fields` into `_extract_payload()`, silently dropping configured `label_table` and `regex_fields`.
 - Fixed on head `3d047d0` and added a regression test on head `b398626` covering label-table and regex extraction through the actual paged execution path.
 - The next CI result must validate both fixes; no CI rerun was manually triggered.
+
+
+## 2026-09-20 — Second CI root cause
+
+CI head `a80761e` completed. Backend Docker and Frontend Docker passed, while Backend and Compose Integration failed at Django system checks during migration. Exact root cause: the six explicit Pharmacy/MarketObservation index names were still longer than Django's 30-character model index-name limit. This was a naming issue, not a database/data issue.
+
+Fixed without adding another migration: `models.py` and the still-unmerged `0010_pharmacy_market_observation.py` now use stable names under 30 characters:
+- `pharm_src_name_idx`
+- `pharm_loc_active_idx`
+- `mktobs_record_time_idx`
+- `mktobs_pharm_time_idx`
+- `mktobs_source_time_idx`
+- `mktobs_avail_time_idx`
+
+The migration remains pre-merge and therefore safe to correct in place. New head: `c38a638`.
