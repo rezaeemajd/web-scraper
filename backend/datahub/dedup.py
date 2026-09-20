@@ -31,6 +31,7 @@ def _candidate_queryset(record):
         .exclude(pk=record.pk)
         .exclude(fingerprint=record.fingerprint)
         .exclude(status=ExtractedRecord.Status.ARCHIVED)
+        .only("id", "entity_type_id", "fingerprint", "status", "normalized_payload")
         .order_by("pk")
     )
 
