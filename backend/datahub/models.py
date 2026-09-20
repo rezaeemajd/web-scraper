@@ -105,8 +105,8 @@ class Pharmacy(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["source_domain", "source_url"],
-                name="uniq_pharmacy_source_url",
+                fields=["source_domain", "canonical_key"],
+                name="uniq_pharmacy_canonical_key",
             ),
         ]
 
