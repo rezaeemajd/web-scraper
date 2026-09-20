@@ -87,7 +87,7 @@ def upsert_pharmacy_from_record(record: ExtractedRecord):
 
     pharmacy, _ = Pharmacy.objects.update_or_create(
         source_domain=record.source_domain,
-        source_url=record.source_url,
+        canonical_key=values["canonical_key"],
         defaults=values,
     )
     return pharmacy
