@@ -79,12 +79,17 @@ def _bounded_response_text(response, max_bytes: int) -> str:
 
 
 def _rate_limit(source: Source) -> None:
-    # Fixed one-minute window: atomic Redis INCR avoids the old one-second
-    # granularity, which incorrectly capped every source at 60 requests/minute.
+    """Atomic fixed-window source limiter.
+
+    The first request in a window is claimed with cache.add(1); later requests
+    use INCR. This works with Redis and avoids requiring a non-atomic
+    get-then-set sequence.
+    """
     limit = max(1, source.rate_limit_per_minute)
     window = int(time.time() // 60)
     key = f"cdi:source-rate:{source.pk}:{window}"
-    cache.add(key, 0, timeout=61)
+    if cache.add(key, 1, timeout=61):
+        return
     count = cache.incr(key)
     if count > limit:
         raise FetchBlocked("source rate limit exceeded")
@@ -123,6 +128,7 @@ def _capture_robots(source: Source, robots_url: str):
     except Exception:
         pass
     return rp
+
 
 def _request_with_safe_redirects(source: Source, url: str, client=None):
     current_url = url
@@ -175,7 +181,7 @@ def _request_with_safe_redirects(source: Source, url: str, client=None):
                         response.status_code,
                         headers=response.headers,
                         content=b"",
-                        request=response.request,
+                        request=getattr(response, "request", None),
                     ), current_url
                 current_url = urljoin(current_url, location)
                 redirected = True
@@ -208,8 +214,6 @@ def capture_url(source: Source, url: str, *, client=None) -> RawCapture:
         _rate_limit(source)
         response, final_url = _request_with_safe_redirects(source, url, client=client)
         try:
-            # _request_with_safe_redirects already bounded and buffered the body.
-            # Reusing response.content avoids a second in-memory streaming pass.
             body = response.content
             text = body.decode(response.encoding or "utf-8", errors="replace")
             return RawCapture.objects.create(
