@@ -427,3 +427,16 @@ command بدون `--persist` کل عملیات DB را داخل transaction اج
 
 ### تغییر نسبت به معماری قبلی
 قبلاً discovery فقط extraction summary تولید می‌کرد؛ اکنون خروجی Adapter وارد Core data pipeline می‌شود. این تغییر capability معماری است و از این تاریخ در benchmark واقعی استفاده خواهد شد.
+
+
+## 2026-09-20 — 13:06 +03:30 — Multi-source market architecture
+
+Benchmark Gardasil اکنون حداقل سه domain مستقل را هدف می‌گیرد:
+`pillix.ir`، `iran-supp.com`، `medpharmaweb.com`.
+
+تفکیک semantic:
+- Pillix: regulatory/product information observation
+- Iran Supplement: commercial retail observation
+- PharmaWeb: commercial marketplace observation
+
+این سه منبع در یک entity معنایی واحد ادغام نمی‌شوند مگر identity evidence کافی وجود داشته باشد؛ هر مشاهده source URL، capture و زمان خود را حفظ می‌کند. Generic JSON-LD فقط در صورت وجود schema.org/Product evidence مجاز است؛ در غیر این صورت source-specific adapter لازم است.
