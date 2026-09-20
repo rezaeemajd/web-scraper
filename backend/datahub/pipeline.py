@@ -46,6 +46,31 @@ def fingerprint(payload):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def canonical_identity_key(entity_type, normalized_payload, *, fields):
+    """Build a stable entity identity from explicitly configured identifier fields.
+
+    Returns an empty key when no identifier configuration exists or any configured
+    identifier is missing. Mutable fields therefore never change the canonical
+    identity; they only change the observation fingerprint.
+    """
+    identity_fields = [field for field in fields if field.is_identifier]
+    if not identity_fields:
+        return ""
+
+    identity = {}
+    for field in identity_fields:
+        value = normalized_payload.get(field.slug)
+        if value in (None, "", []):
+            return ""
+        identity[field.slug] = value
+
+    raw = json.dumps(
+        {"entity_type": entity_type.slug, "identity": identity},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return "idv1:" + hashlib.sha256(raw.encode()).hexdigest()
 def validate_payload(entity_type, payload, *, fields=None):
     fields = list(fields) if fields is not None else list(entity_type.fields.all())
     return [
@@ -90,6 +115,7 @@ def _build_values(
         "evidence": evidence or [],
         "confidence": score,
         "quality_score": score,
+        "canonical_key": canonical_identity_key(entity_type, normalized, fields=fields),
         "fingerprint": fingerprint(normalized),
         "validation_errors": errors,
         "status": (
@@ -107,101 +133,93 @@ def process_records(
     fields=None,
     batch_size=100,
 ):
-    """Persist many extracted observations with one lookup and batched inserts.
-
-    Existing fingerprints are intentionally left unchanged: the canonical record
-    is immutable for this ingestion pass, while raw capture/evidence remain
-    attached to the first observation. The returned list preserves input order.
-    """
+    """Persist observations using durable identity plus snapshot fingerprint."""
     items = list(items)
     if not items:
         return []
 
     fields = list(fields) if fields is not None else list(entity_type.fields.all())
-    values_list = [
-        _build_values(
-            entity_type=entity_type,
-            url=item["url"],
-            payload=item["payload"],
-            raw_capture=item.get("raw_capture"),
-            evidence=item.get("evidence"),
-            source_domain=item.get("source_domain"),
-            fields=fields,
-        )
-        for item in items
-    ]
+    values_list = [_build_values(
+        entity_type=entity_type,
+        url=item["url"],
+        payload=item["payload"],
+        raw_capture=item.get("raw_capture"),
+        evidence=item.get("evidence"),
+        source_domain=item.get("source_domain"),
+        fields=fields,
+    ) for item in items]
 
-    # Collapse duplicate fingerprints inside the same page before INSERT. This
-    # avoids unnecessary unique-index work for repeated cards/rows.
-    unique_values = {}
+    canonical_keys = {v["canonical_key"] for v in values_list if v["canonical_key"]}
+    fingerprints = {v["fingerprint"] for v in values_list if not v["canonical_key"]}
+    existing = {}
+    if canonical_keys:
+        existing.update({r.canonical_key: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, canonical_key__in=canonical_keys)})
+    if fingerprints:
+        existing.update({r.fingerprint: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, fingerprint__in=fingerprints)})
+
+    identity_fields = [field for field in fields if field.is_identifier]
+    unresolved = canonical_keys - set(existing)
+    if unresolved and identity_fields:
+        from django.db.models import Q
+        identity_payloads = {}
+        condition = Q()
+        for values in values_list:
+            key = values["canonical_key"]
+            if not key or key in existing or key in identity_payloads:
+                continue
+            identity_payloads[key] = {field.slug: values["normalized_payload"].get(field.slug) for field in identity_fields}
+            condition |= Q(normalized_payload__contains=identity_payloads[key])
+        legacy_matches = {}
+        duplicate_keys = set()
+        if identity_payloads:
+            qs = ExtractedRecord.objects.filter(entity_type=entity_type, canonical_key="").filter(condition).only("id", "entity_type_id", "canonical_key", "fingerprint", "status", "normalized_payload")
+            for record in qs.iterator():
+                for key, identity in identity_payloads.items():
+                    if all(record.normalized_payload.get(field.slug) == identity[field.slug] for field in identity_fields):
+                        if key in legacy_matches:
+                            duplicate_keys.add(key)
+                        else:
+                            legacy_matches[key] = record
+        for key in duplicate_keys:
+            legacy_matches.pop(key, None)
+        if legacy_matches:
+            for key, record in legacy_matches.items():
+                record.canonical_key = key
+            ExtractedRecord.objects.bulk_update(legacy_matches.values(), ["canonical_key"], batch_size=max(1, int(batch_size)))
+            existing.update(legacy_matches)
+
+    missing = {}
     for values in values_list:
-        unique_values.setdefault(values["fingerprint"], values)
-
-    fingerprints = list(unique_values)
-    existing = {
-        record.fingerprint: record
-        for record in ExtractedRecord.objects.filter(
-            entity_type=entity_type,
-            fingerprint__in=fingerprints,
-        )
-    }
-
-    missing = [
-        values for fp, values in unique_values.items()
-        if fp not in existing
-    ]
+        key = values["canonical_key"] or values["fingerprint"]
+        if key not in existing:
+            missing.setdefault(key, values)
     if missing:
-        new_records = [
-            ExtractedRecord(entity_type=entity_type, **values)
-            for values in missing
-        ]
-        # Ignore only uniqueness races: all model fields are populated,
-        # and the fingerprint constraint is the intended idempotency key.
-        # This lets the whole batch succeed even when another worker inserts
-        # one of the same fingerprints concurrently.
         ExtractedRecord.objects.bulk_create(
-            new_records,
+            [ExtractedRecord(entity_type=entity_type, **values) for values in missing.values()],
             batch_size=max(1, int(batch_size)),
             ignore_conflicts=True,
         )
+        if canonical_keys:
+            existing.update({r.canonical_key: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, canonical_key__in=canonical_keys)})
+        if fingerprints:
+            existing.update({r.fingerprint: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, fingerprint__in=fingerprints)})
 
-        existing.update({
-            record.fingerprint: record
-            for record in ExtractedRecord.objects.filter(
-                entity_type=entity_type,
-                fingerprint__in=fingerprints,
-            )
-        })
+    resolved = [existing[values["canonical_key"] or values["fingerprint"]] for values in values_list]
 
-    resolved = [existing[values["fingerprint"]] for values in values_list]
-
-    # Preserve every scrape observation without mutating the canonical record.
-    # RawCapture is the immutable page-level provenance anchor.
     from .models import RecordObservation
-
-    observations = [
-        RecordObservation(
-            record=record,
-            raw_capture=values["raw_capture"],
-            source_url=values["source_url"],
-            source_domain=values["source_domain"],
-            payload=values["payload"],
-            normalized_payload=values["normalized_payload"],
-            evidence=values["evidence"],
-            fingerprint=values["fingerprint"],
-        )
-        for record, values in zip(resolved, values_list)
-        if values["raw_capture"] is not None
-    ]
+    observations = [RecordObservation(
+        record=record,
+        raw_capture=values["raw_capture"],
+        source_url=values["source_url"],
+        source_domain=values["source_domain"],
+        payload=values["payload"],
+        normalized_payload=values["normalized_payload"],
+        evidence=values["evidence"],
+        fingerprint=values["fingerprint"],
+    ) for record, values in zip(resolved, values_list) if values["raw_capture"] is not None]
     if observations:
-        RecordObservation.objects.bulk_create(
-            observations,
-            batch_size=max(1, int(batch_size)),
-            ignore_conflicts=True,
-        )
-
+        RecordObservation.objects.bulk_create(observations, batch_size=max(1, int(batch_size)), ignore_conflicts=True)
     return resolved
-
 
 def process_record(
     *,
