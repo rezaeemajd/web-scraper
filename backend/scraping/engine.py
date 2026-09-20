@@ -6,7 +6,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 from .models import Scraper
 from sources.fetcher import capture_url
-from datahub.pipeline import process_record
+from datahub.pipeline import process_records
 
 
 class ScraperConfigError(ValueError):
@@ -14,6 +14,7 @@ class ScraperConfigError(ValueError):
 
 
 _MAX_PAGES = 100
+_RECORD_BATCH_SIZE = 100
 
 
 def validate_extraction_config(config):
@@ -176,17 +177,24 @@ def execute_many(scraper: Scraper):
                 break
 
             payloads, evidences = _extract_static_html_many(config, capture.body)
-            for payload, evidence in zip(payloads, evidences):
-                records.append(
-                    process_record(
-                        entity_type=scraper.entity_type,
-                        url=current_url,
-                        payload=payload,
-                        raw_capture=capture,
-                        evidence=evidence,
-                        source_domain=scraper.source.domain,
-                    )
+            page_items = [
+                {
+                    "url": current_url,
+                    "payload": payload,
+                    "raw_capture": capture,
+                    "evidence": evidence,
+                    "source_domain": scraper.source.domain,
+                }
+                for payload, evidence in zip(payloads, evidences)
+            ]
+            records.extend(
+                process_records(
+                    entity_type=scraper.entity_type,
+                    items=page_items,
+                    fields=entity_fields,
+                    batch_size=_RECORD_BATCH_SIZE,
                 )
+            )
 
             next_url = _next_page_url(config, capture.body, current_url)
             if not next_url:
