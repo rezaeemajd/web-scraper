@@ -400,3 +400,30 @@ Source/Domain → Discovery → Adapter → ExtractedRecord → Normalization/Id
 
 ### گام بعدی معماری
 Adapter output → process_records() → ExtractedRecord → RecordObservation/RecordChange → API → real RTL Explorer؛ سپس Pharmacy/MarketObservation و crawl محدود تهران پس از اثبات داده واقعی.
+
+
+## 2026-09-20 — 12:58 +03:30 — Pipeline integration architecture update
+
+### جریان اجرایی فعلی
+`Source → bounded discovery → safe RawCapture → source adapter → adapter_record_to_item → process_records → ExtractedRecord → RecordObservation/RecordChange`
+
+### Provenance contract
+هر رکورد استخراج‌شده در این مسیر، تا حد امکان این زنجیره را حفظ می‌کند:
+- source domain
+- source URL
+- detail URL در صورت وجود
+- RawCapture ID
+- evidence type
+- payload و normalized payload
+- observation fingerprint
+
+captureهای موفق تنها ورودی persist pipeline هستند؛ خطا و block فقط در گزارش run باقی می‌مانند.
+
+### Dry-run contract
+command بدون `--persist` کل عملیات DB را داخل transaction اجرا و در پایان rollback می‌کند؛ بنابراین discovery، Source، RawCapture، EntityType/Field و records ایجادشده در dry-run commit نمی‌شوند. این با مدل transaction اتمیک Django هم‌راستاست. 
+
+### مرز semantic
+`Product` در این مرحله یک entity عمومی برای خروجی Adapter است؛ قیمت و availability صرفاً داده مشاهده‌شده هستند و نباید به‌عنوان حقیقت دائمی محصول تفسیر شوند. برای sourceهای پزشکی/رگولاتوری و marketplace در benchmark بعدی adapterهای جداگانه و semantics مستقل لازم است.
+
+### تغییر نسبت به معماری قبلی
+قبلاً discovery فقط extraction summary تولید می‌کرد؛ اکنون خروجی Adapter وارد Core data pipeline می‌شود. این تغییر capability معماری است و از این تاریخ در benchmark واقعی استفاده خواهد شد.
