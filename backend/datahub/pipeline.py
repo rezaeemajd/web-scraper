@@ -3,7 +3,6 @@ import json
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-from django.db import IntegrityError, transaction
 
 from .models import ExtractedRecord
 
@@ -156,17 +155,15 @@ def process_records(
             ExtractedRecord(entity_type=entity_type, **values)
             for values in missing
         ]
-        try:
-            with transaction.atomic():
-                ExtractedRecord.objects.bulk_create(
-                    new_records,
-                    batch_size=max(1, int(batch_size)),
-                )
-        except IntegrityError:
-            # Another worker may have inserted the same fingerprint between
-            # the SELECT and INSERT. Re-read the complete key set and return
-            # canonical rows rather than creating/returning duplicates.
-            pass
+        # Ignore only uniqueness races: all model fields are populated,
+        # and the fingerprint constraint is the intended idempotency key.
+        # This lets the whole batch succeed even when another worker inserts
+        # one of the same fingerprints concurrently.
+        ExtractedRecord.objects.bulk_create(
+            new_records,
+            batch_size=max(1, int(batch_size)),
+            ignore_conflicts=True,
+        )
 
         existing.update({
             record.fingerprint: record
