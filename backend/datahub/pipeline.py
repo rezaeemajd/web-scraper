@@ -4,7 +4,7 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 
-from .models import ExtractedRecord
+from .models import ExtractedRecord, RecordChange, RecordObservation
 
 
 def normalize_text(value):
@@ -71,6 +71,20 @@ def canonical_identity_key(entity_type, normalized_payload, *, fields):
         separators=(",", ":"),
     )
     return "idv1:" + hashlib.sha256(raw.encode()).hexdigest()
+def _diff_payload(before, after, prefix=""):
+    changes = []
+    before = before if isinstance(before, dict) else {}
+    after = after if isinstance(after, dict) else {}
+    for key in sorted(set(before) | set(after)):
+        path = f"{prefix}.{key}" if prefix else str(key)
+        old = before.get(key)
+        new = after.get(key)
+        if isinstance(old, dict) and isinstance(new, dict):
+            changes.extend(_diff_payload(old, new, path))
+        elif old != new:
+            changes.append({"field": path, "before": old, "after": new})
+    return changes
+
 def validate_payload(entity_type, payload, *, fields=None):
     fields = list(fields) if fields is not None else list(entity_type.fields.all())
     return [
@@ -206,19 +220,64 @@ def process_records(
 
     resolved = [existing[values["canonical_key"] or values["fingerprint"]] for values in values_list]
 
-    from .models import RecordObservation
-    observations = [RecordObservation(
-        record=record,
-        raw_capture=values["raw_capture"],
-        source_url=values["source_url"],
-        source_domain=values["source_domain"],
-        payload=values["payload"],
-        normalized_payload=values["normalized_payload"],
-        evidence=values["evidence"],
-        fingerprint=values["fingerprint"],
-    ) for record, values in zip(resolved, values_list) if values["raw_capture"] is not None]
+    # Resolve the latest persisted observation once per canonical record.
+    previous_by_record = {}
+    for record_id in {record.pk for record, values in zip(resolved, values_list) if values["raw_capture"] is not None}:
+        previous_by_record[record_id] = (
+            RecordObservation.objects.filter(record_id=record_id)
+            .order_by("-observed_at", "-id")
+            .first()
+        )
+
+    observations = []
+    change_specs = []
+    state_by_record = {}
+    for record, values in zip(resolved, values_list):
+        if values["raw_capture"] is None:
+            continue
+        previous = state_by_record.get(record.pk, previous_by_record.get(record.pk))
+        observation = RecordObservation(
+            record=record,
+            raw_capture=values["raw_capture"],
+            source_url=values["source_url"],
+            source_domain=values["source_domain"],
+            payload=values["payload"],
+            normalized_payload=values["normalized_payload"],
+            evidence=values["evidence"],
+            fingerprint=values["fingerprint"],
+        )
+        observations.append(observation)
+        if previous is not None and previous.fingerprint != values["fingerprint"]:
+            changes = _diff_payload(previous.normalized_payload, values["normalized_payload"])
+            if changes:
+                change_specs.append((record, previous, observation, changes))
+        state_by_record[record.pk] = observation
+
     if observations:
-        RecordObservation.objects.bulk_create(observations, batch_size=max(1, int(batch_size)), ignore_conflicts=True)
+        RecordObservation.objects.bulk_create(
+            observations,
+            batch_size=max(1, int(batch_size)),
+            ignore_conflicts=True,
+        )
+
+    changes = [
+        RecordChange(
+            record=record,
+            previous_observation=previous,
+            observation=observation,
+            changed_fields=[item["field"] for item in diff],
+            before={item["field"]: item["before"] for item in diff},
+            after={item["field"]: item["after"] for item in diff},
+        )
+        for record, previous, observation, diff in change_specs
+        if observation.pk
+    ]
+    if changes:
+        RecordChange.objects.bulk_create(
+            changes,
+            batch_size=max(1, int(batch_size)),
+            ignore_conflicts=True,
+        )
     return resolved
 
 def process_record(
