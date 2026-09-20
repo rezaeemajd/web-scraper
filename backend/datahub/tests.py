@@ -598,3 +598,50 @@ def test_identical_observation_does_not_create_change_event():
     )
 
     assert RecordChange.objects.filter(record=record).count() == 0
+
+
+@pytest.mark.django_db
+def test_adapter_record_maps_provenance_and_persists_observation():
+    from .models import RawCapture, RecordObservation
+    from .pipeline import adapter_record_to_item, process_records
+
+    entity = EntityType.objects.create(name="محصول", slug="product-pipeline")
+    EntityField.objects.create(entity_type=entity, name="نام", slug="name", required=True)
+    EntityField.objects.create(entity_type=entity, name="SKU", slug="sku", is_identifier=True)
+
+    capture = RawCapture.objects.create(
+        url="https://example.com/product",
+        body="<html>real capture</html>",
+        status=RawCapture.Status.SUCCESS,
+    )
+    adapter_record = {
+        "name": "گارداسیل 9",
+        "sku": "G9-001",
+        "detail_url": "https://example.com/product/g9",
+        "source_url": "https://example.com/product",
+        "observation_type": "retail_product",
+        "evidence_type": "schema.org/Product",
+    }
+
+    item = adapter_record_to_item(
+        adapter_record,
+        source_domain="example.com",
+        raw_capture=capture,
+        source_url=capture.url,
+    )
+    records = process_record(
+        entity_type=entity,
+        url=item["url"],
+        payload=item["payload"],
+        raw_capture=item["raw_capture"],
+        evidence=item["evidence"],
+        source_domain=item["source_domain"],
+    )
+
+    observation = RecordObservation.objects.get(record=records)
+    assert records.source_url == "https://example.com/product/g9"
+    assert records.source_domain == "example.com"
+    assert records.raw_capture_id == capture.pk
+    assert observation.raw_capture_id == capture.pk
+    assert observation.evidence[0]["raw_capture_id"] == capture.pk
+    assert observation.evidence[0]["type"] == "schema.org/Product"
