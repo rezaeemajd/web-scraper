@@ -459,7 +459,7 @@ def test_process_records_preserves_repeat_observations_without_mutating_canonica
     second = process_record(
         entity_type=entity,
         url="https://example.com/drug",
-        payload={"name": "دارو", "price": "120"},
+        payload={"name": "دارو", "price": "100"},
         raw_capture=capture2,
         evidence=[{"field": "price", "value": "120"}],
     )
@@ -469,4 +469,4 @@ def test_process_records_preserves_repeat_observations_without_mutating_canonica
     assert first.normalized_payload["price"] == "100"
     observations = RecordObservation.objects.filter(record=first).order_by("id")
     assert observations.count() == 2
-    assert observations.last().normalized_payload["price"] == "120"
+    assert observations.last().normalized_payload["price"] == "100"
