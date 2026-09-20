@@ -188,29 +188,33 @@ class Command(BaseCommand):
                             entry["extracted_records"] = len(records)
                             extracted_records += len(records)
 
-                            if records:
-                                entity_type = self._entity_type(entity_kind)
-                                items = [
-                                    adapter_record_to_item(
-                                        record,
-                                        source_domain=item["domain"],
-                                        raw_capture=capture,
-                                        source_url=url,
+                            # Keep each capture's database work inside a savepoint.
+                            # This is essential for dry-run mode: a single bad record
+                            # must not poison the surrounding atomic transaction.
+                            with transaction.atomic():
+                                if records:
+                                    entity_type = self._entity_type(entity_kind)
+                                    items = [
+                                        adapter_record_to_item(
+                                            record,
+                                            source_domain=item["domain"],
+                                            raw_capture=capture,
+                                            source_url=url,
+                                        )
+                                        for record in records
+                                    ]
+                                    persisted = process_records(
+                                        entity_type=entity_type,
+                                        items=items,
                                     )
-                                    for record in records
-                                ]
-                                persisted = process_records(
-                                    entity_type=entity_type,
-                                    items=items,
-                                )
-                                entry["persisted_records"] = len(persisted)
-                                persisted_records += len(persisted)
+                                    entry["persisted_records"] = len(persisted)
+                                    persisted_records += len(persisted)
 
-                                if entity_kind == "pharmacy":
-                                    for record in persisted:
-                                        upsert_pharmacy_from_record(record)
-                                    entry["materialized_pharmacies"] = len(persisted)
-                                    materialized_pharmacies += len(persisted)
+                                    if entity_kind == "pharmacy":
+                                        for record in persisted:
+                                            upsert_pharmacy_from_record(record)
+                                        entry["materialized_pharmacies"] = len(persisted)
+                                        materialized_pharmacies += len(persisted)
                         except Exception as exc:
                             entry["extraction_error"] = str(exc)[:500]
                             extraction_errors.append({
