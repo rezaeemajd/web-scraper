@@ -147,6 +147,17 @@ def _next_page_url(config, html, current_url):
     return urljoin(current_url, href)
 
 
+def _batched(items, size):
+    batch = []
+    for item in items:
+        batch.append(item)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
 def execute_many(scraper: Scraper):
     if not scraper.entity_type:
         raise ValueError("scraper.entity_type is required")
@@ -187,14 +198,15 @@ def execute_many(scraper: Scraper):
                 }
                 for payload, evidence in zip(payloads, evidences)
             ]
-            records.extend(
-                process_records(
-                    entity_type=scraper.entity_type,
-                    items=page_items,
-                    fields=entity_fields,
-                    batch_size=_RECORD_BATCH_SIZE,
+            for batch in _batched(page_items, _RECORD_BATCH_SIZE):
+                records.extend(
+                    process_records(
+                        entity_type=scraper.entity_type,
+                        items=batch,
+                        fields=entity_fields,
+                        batch_size=_RECORD_BATCH_SIZE,
+                    )
                 )
-            )
 
             next_url = _next_page_url(config, capture.body, current_url)
             if not next_url:
