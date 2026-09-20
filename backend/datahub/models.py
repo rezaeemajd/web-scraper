@@ -27,6 +27,29 @@ class ExtractedRecord(models.Model):
             ),
         ]
         constraints=[models.UniqueConstraint(fields=["entity_type","fingerprint"],condition=~Q(fingerprint=""),name="uniq_entity_record_fingerprint")]
+class RecordObservation(models.Model):
+    record=models.ForeignKey(ExtractedRecord,on_delete=models.CASCADE,related_name="observations")
+    raw_capture=models.ForeignKey(RawCapture,on_delete=models.SET_NULL,null=True,blank=True,related_name="observations")
+    source_url=models.URLField(max_length=2000)
+    source_domain=models.CharField(max_length=255,db_index=True)
+    payload=models.JSONField(default=dict)
+    normalized_payload=models.JSONField(default=dict)
+    evidence=models.JSONField(default=list,blank=True)
+    fingerprint=models.CharField(max_length=64,db_index=True,blank=True)
+    observed_at=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        indexes=[
+            models.Index(fields=["record","observed_at"]),
+            models.Index(fields=["source_domain","observed_at"]),
+        ]
+        constraints=[
+            models.UniqueConstraint(
+                fields=["record","raw_capture"],
+                condition=Q(raw_capture__isnull=False),
+                name="uniq_record_observation_capture",
+            )
+        ]
+
 class DedupCandidate(models.Model):
     class Status(models.TextChoices): OPEN="open","Open"; MERGED="merged","Merged"; REJECTED="rejected","Rejected"
     record_a=models.ForeignKey(ExtractedRecord,on_delete=models.CASCADE,related_name="dedup_left"); record_b=models.ForeignKey(ExtractedRecord,on_delete=models.CASCADE,related_name="dedup_right"); similarity=models.DecimalField(max_digits=5,decimal_places=4); matched_fields=models.JSONField(default=list,blank=True); status=models.CharField(max_length=20,choices=Status.choices,default="open"); created_at=models.DateTimeField(auto_now_add=True)
