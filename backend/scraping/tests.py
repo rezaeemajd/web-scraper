@@ -353,7 +353,7 @@ def test_execute_many_follows_bounded_pagination_and_avoids_loops(monkeypatch):
         "https://example.com/page/2": '<div class="name">B</div><a class="next" href="/page/2">loop</a>',
     }
 
-    def fake_capture(source, url):
+    def fake_capture(source, url, *, client=None):
         return RawCapture(
             url=url,
             status_code=200,
@@ -399,9 +399,19 @@ def test_stale_running_scraper_run_is_recovered():
     from scraping.tasks import _recover_stale_run
     from scraping.models import ScraperRun
 
-    scraper = Scraper.objects.first()
-    if scraper is None:
-        pytest.skip("requires scraper fixture")
+    source = Source.objects.create(
+        name="Stale Run Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="تست بازیابی", slug="stale-recovery")
+    scraper = Scraper.objects.create(
+        name="Stale recovery scraper",
+        source=source,
+        start_url="https://example.com/stale",
+        entity_type=entity,
+    )
     old = timezone.now() - timedelta(minutes=60)
     run = ScraperRun.objects.create(
         scraper=scraper,
@@ -412,3 +422,86 @@ def test_stale_running_scraper_run_is_recovered():
     run.refresh_from_db()
     assert run.status == ScraperRun.Status.FAILED
     assert "lease expired" in run.error_message
+
+
+@pytest.mark.django_db
+def test_execute_many_batches_duplicate_records_before_persisting(monkeypatch):
+    from datahub.models import ExtractedRecord, RawCapture
+
+    source = Source.objects.create(
+        name="Batch Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="داده تکراری", slug="batch-dedupe")
+    scraper = Scraper.objects.create(
+        name="Batch scraper",
+        source=source,
+        start_url="https://example.com/items",
+        entity_type=entity,
+        extraction_config={
+            "record_selector": ".item",
+            "fields": {"name": ".name"},
+        },
+    )
+    capture = RawCapture(
+        url=scraper.start_url,
+        status_code=200,
+        body=(
+            '<div class="item"><span class="name">A</span></div>'
+            '<div class="item"><span class="name">A</span></div>'
+            '<div class="item"><span class="name">B</span></div>'
+        ),
+        status=RawCapture.Status.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "scraping.engine.capture_url",
+        lambda source, url, *, client=None: capture,
+    )
+
+    records, captures = execute_many(scraper)
+
+    assert len(captures) == 1
+    assert len(records) == 3
+    assert ExtractedRecord.objects.filter(entity_type=entity).count() == 2
+    assert records[0].pk == records[1].pk
+    assert records[2].pk != records[0].pk
+
+
+@pytest.mark.django_db
+def test_run_scraper_retries_transient_http_status(monkeypatch):
+    from datahub.models import RawCapture
+    from scraping.tasks import RetryableScraperRun, run_scraper
+    from scraping.models import ScraperRun
+
+    source = Source.objects.create(
+        name="Transient Status Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="وضعیت موقت", slug="transient-status")
+    scraper = Scraper.objects.create(
+        name="Transient status scraper",
+        source=source,
+        start_url="https://example.com/temporary",
+        entity_type=entity,
+    )
+    capture = RawCapture(
+        url=scraper.start_url,
+        status_code=503,
+        status=RawCapture.Status.ERROR,
+        error_message="transient:http_status:503",
+    )
+    monkeypatch.setattr(
+        "scraping.tasks.execute_many",
+        lambda scraper: ([], [capture]),
+    )
+
+    with pytest.raises(RetryableScraperRun, match="transient:http_status:503"):
+        run_scraper.run(scraper.pk)
+
+    run = ScraperRun.objects.get(scraper=scraper)
+    assert run.status == ScraperRun.Status.FAILED
+    assert run.error_message == "transient:http_status:503"
