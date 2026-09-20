@@ -4,6 +4,7 @@ import httpx
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from scraping.adapters.registry import get_adapter
 from scraping.discovery import bounded_discovery
 from scraping.source_catalog import SOURCE_SEEDS
 from sources.fetcher import capture_url
@@ -92,22 +93,38 @@ class Command(BaseCommand):
                         is_success=lambda capture: capture.status == capture.Status.SUCCESS,
                     )
 
-                captures = [
-                    {
+                adapter = get_adapter(item["adapter"])
+                captures = []
+                extracted_records = 0
+                extraction_errors = []
+                for url, capture in pages:
+                    entry = {
                         "url": url,
                         "status": capture.status,
                         "status_code": capture.status_code,
                         "bytes": len(capture.body.encode("utf-8")),
                         "error": capture.error_message,
+                        "extracted_records": 0,
                     }
-                    for url, capture in pages
-                ]
+                    if capture.status == capture.Status.SUCCESS:
+                        try:
+                            records = adapter(capture.body, url)
+                            entry["extracted_records"] = len(records)
+                            extracted_records += len(records)
+                        except Exception as exc:
+                            entry["extraction_error"] = str(exc)[:500]
+                            extraction_errors.append(
+                                {"url": url, "error": str(exc)[:500]}
+                            )
+                    captures.append(entry)
                 results.append({
                     "source": item["key"],
                     "domain": item["domain"],
                     "capabilities": item["capabilities"],
                     "adapter": item["adapter"],
                     "pages_discovered_and_fetched": len(pages),
+                    "records_extracted": extracted_records,
+                    "extraction_errors": extraction_errors,
                     "captures": captures,
                 })
             return results
