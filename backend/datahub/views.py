@@ -12,6 +12,8 @@ from .models import (
     ExtractedRecord,
     Location,
     RawCapture,
+    RecordChange,
+    RecordObservation,
     ReviewTask,
 )
 from .review import transition_review_task
@@ -25,6 +27,8 @@ from .serializers import (
     LocationSerializer,
     RawCaptureListSerializer,
     RawCaptureSerializer,
+    RecordChangeSerializer,
+    RecordObservationSerializer,
     ReviewTaskSerializer,
 )
 
@@ -157,3 +161,18 @@ class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AuditEventSerializer
     permission_classes = [StaffWritePermission]
     filterset_fields = ["action", "entity", "object_id"]
+
+
+class RecordObservationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = RecordObservation.objects.select_related("record", "raw_capture")
+    serializer_class = RecordObservationSerializer
+    permission_classes = [StaffWritePermission]
+    filterset_fields = ["record", "source_domain"]
+    ordering_fields = ["observed_at"]
+
+class RecordChangeViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = RecordChange.objects.select_related("record", "observation", "previous_observation")
+    serializer_class = RecordChangeSerializer
+    permission_classes = [StaffWritePermission]
+    filterset_fields = ["record"]
+    ordering_fields = ["detected_at"]
