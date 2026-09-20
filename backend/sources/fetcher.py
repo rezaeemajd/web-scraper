@@ -216,6 +216,11 @@ def capture_url(source: Source, url: str, *, client=None) -> RawCapture:
                 status=RawCapture.Status.SUCCESS
                 if response.is_success
                 else RawCapture.Status.ERROR,
+                error_message=(
+                    f"transient:http_status:{response.status_code}"
+                    if response.status_code in {408, 429} or response.status_code >= 500
+                    else ""
+                ),
             )
         finally:
             response.close()
