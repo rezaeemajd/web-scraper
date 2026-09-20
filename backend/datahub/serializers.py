@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import EntityType,EntityField,Location,RawCapture,ExtractedRecord,DedupCandidate,ReviewTask,AuditEvent
+from .models import EntityType,EntityField,Location,RawCapture,ExtractedRecord,DedupCandidate,ReviewTask,AuditEvent,RecordObservation,RecordChange
 class EntityFieldSerializer(serializers.ModelSerializer):
     class Meta: model=EntityField; fields="__all__"
 class EntityTypeSerializer(serializers.ModelSerializer):
@@ -55,3 +55,13 @@ class ReviewTaskSerializer(serializers.ModelSerializer):
         return super().validate(attrs)
 class AuditEventSerializer(serializers.ModelSerializer):
     class Meta: model=AuditEvent; fields="__all__"
+
+class RecordObservationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecordObservation
+        fields = "__all__"
+
+class RecordChangeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecordChange
+        fields = "__all__"
