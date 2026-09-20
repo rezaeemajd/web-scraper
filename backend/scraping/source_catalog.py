@@ -17,7 +17,7 @@ SOURCE_SEEDS = [
             "https://pillix.ir/pharmacy/county-tehran",
         ],
         "capabilities": ["drug", "pharmacy", "market_search"],
-        "adapter": "pillix",
+        "adapter": "generic",
     },
     {
         "key": "darooha",
@@ -44,7 +44,7 @@ SOURCE_SEEDS = [
         "base_url": "https://dr-koja.ir",
         "seeds": ["https://dr-koja.ir/drugs"],
         "capabilities": ["drug", "doctor", "clinic"],
-        "adapter": "dr_koja",
+        "adapter": "generic",
     },
     {
         "key": "boroshor",
