@@ -1,10 +1,9 @@
 import hashlib
 import json
 from decimal import Decimal
-
-from django.db import transaction
 from urllib.parse import urlsplit
 
+from django.db import transaction
 
 from .models import ExtractedRecord, RecordChange, RecordObservation
 
@@ -73,6 +72,8 @@ def canonical_identity_key(entity_type, normalized_payload, *, fields):
         separators=(",", ":"),
     )
     return "idv1:" + hashlib.sha256(raw.encode()).hexdigest()
+
+
 def _diff_payload(before, after, prefix=""):
     changes = []
     before = before if isinstance(before, dict) else {}
@@ -86,6 +87,7 @@ def _diff_payload(before, after, prefix=""):
         elif old != new:
             changes.append({"field": path, "before": old, "after": new})
     return changes
+
 
 def validate_payload(entity_type, payload, *, fields=None):
     fields = list(fields) if fields is not None else list(entity_type.fields.all())
@@ -101,8 +103,7 @@ def quality_score(payload, entity_type, errors, *, fields=None):
     if not fields:
         return Decimal("0.0000")
     filled = sum(
-        1 for field in fields
-        if payload.get(field.slug) not in (None, "", [])
+        1 for field in fields if payload.get(field.slug) not in (None, "", [])
     )
     penalty = min(0.5, len(errors) * 0.1)
     return Decimal(str(round(max(0.0, filled / len(fields) - penalty), 4)))
@@ -142,57 +143,107 @@ def _build_values(
     }
 
 
+def adapter_record_to_item(record, *, source_domain, raw_capture, source_url):
+    """Map an adapter result to the canonical process_records contract."""
+    if not isinstance(record, dict):
+        raise TypeError("adapter record must be a dictionary")
+
+    payload = {
+        key: value
+        for key, value in record.items()
+        if key not in {"source_url", "detail_url"}
+    }
+    detail_url = str(record.get("detail_url") or source_url).strip()
+    evidence = [{
+        "source_domain": source_domain,
+        "source_url": source_url,
+        "detail_url": detail_url,
+        "raw_capture_id": raw_capture.pk,
+        "type": record.get("evidence_type") or "adapter",
+    }]
+    return {
+        "url": detail_url,
+        "payload": payload,
+        "raw_capture": raw_capture,
+        "evidence": evidence,
+        "source_domain": source_domain,
+    }
+
+
 @transaction.atomic
-def process_records(
-    *,
-    entity_type,
-    items,
-    fields=None,
-    batch_size=100,
-):
+def process_records(*, entity_type, items, fields=None, batch_size=100):
     """Persist observations using durable identity plus snapshot fingerprint."""
     items = list(items)
     if not items:
         return []
 
     fields = list(fields) if fields is not None else list(entity_type.fields.all())
-    values_list = [_build_values(
-        entity_type=entity_type,
-        url=item["url"],
-        payload=item["payload"],
-        raw_capture=item.get("raw_capture"),
-        evidence=item.get("evidence"),
-        source_domain=item.get("source_domain"),
-        fields=fields,
-    ) for item in items]
+    values_list = [
+        _build_values(
+            entity_type=entity_type,
+            url=item["url"],
+            payload=item["payload"],
+            raw_capture=item.get("raw_capture"),
+            evidence=item.get("evidence"),
+            source_domain=item.get("source_domain"),
+            fields=fields,
+        )
+        for item in items
+    ]
 
     canonical_keys = {v["canonical_key"] for v in values_list if v["canonical_key"]}
     fingerprints = {v["fingerprint"] for v in values_list if not v["canonical_key"]}
     existing = {}
     if canonical_keys:
-        existing.update({r.canonical_key: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, canonical_key__in=canonical_keys)})
+        existing.update({
+            r.canonical_key: r
+            for r in ExtractedRecord.objects.filter(
+                entity_type=entity_type, canonical_key__in=canonical_keys
+            )
+        })
     if fingerprints:
-        existing.update({r.fingerprint: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, fingerprint__in=fingerprints)})
+        existing.update({
+            r.fingerprint: r
+            for r in ExtractedRecord.objects.filter(
+                entity_type=entity_type, fingerprint__in=fingerprints
+            )
+        })
 
     identity_fields = [field for field in fields if field.is_identifier]
     unresolved = canonical_keys - set(existing)
     if unresolved and identity_fields:
         from django.db.models import Q
+
         identity_payloads = {}
         condition = Q()
         for values in values_list:
             key = values["canonical_key"]
             if not key or key in existing or key in identity_payloads:
                 continue
-            identity_payloads[key] = {field.slug: values["normalized_payload"].get(field.slug) for field in identity_fields}
+            identity_payloads[key] = {
+                field.slug: values["normalized_payload"].get(field.slug)
+                for field in identity_fields
+            }
             condition |= Q(normalized_payload__contains=identity_payloads[key])
+
         legacy_matches = {}
         duplicate_keys = set()
         if identity_payloads:
-            qs = ExtractedRecord.objects.filter(entity_type=entity_type, canonical_key="").filter(condition).only("id", "entity_type_id", "canonical_key", "fingerprint", "status", "normalized_payload")
+            qs = (
+                ExtractedRecord.objects
+                .filter(entity_type=entity_type, canonical_key="")
+                .filter(condition)
+                .only(
+                    "id", "entity_type_id", "canonical_key", "fingerprint",
+                    "status", "normalized_payload",
+                )
+            )
             for record in qs.iterator():
                 for key, identity in identity_payloads.items():
-                    if all(record.normalized_payload.get(field.slug) == identity[field.slug] for field in identity_fields):
+                    if all(
+                        record.normalized_payload.get(field.slug) == identity[field.slug]
+                        for field in identity_fields
+                    ):
                         if key in legacy_matches:
                             duplicate_keys.add(key)
                         else:
@@ -202,7 +253,11 @@ def process_records(
         if legacy_matches:
             for key, record in legacy_matches.items():
                 record.canonical_key = key
-            ExtractedRecord.objects.bulk_update(legacy_matches.values(), ["canonical_key"], batch_size=max(1, int(batch_size)))
+            ExtractedRecord.objects.bulk_update(
+                legacy_matches.values(),
+                ["canonical_key"],
+                batch_size=max(1, int(batch_size)),
+            )
             existing.update(legacy_matches)
 
     missing = {}
@@ -212,22 +267,42 @@ def process_records(
             missing.setdefault(key, values)
     if missing:
         ExtractedRecord.objects.bulk_create(
-            [ExtractedRecord(entity_type=entity_type, **values) for values in missing.values()],
+            [
+                ExtractedRecord(entity_type=entity_type, **values)
+                for values in missing.values()
+            ],
             batch_size=max(1, int(batch_size)),
             ignore_conflicts=True,
         )
         if canonical_keys:
-            existing.update({r.canonical_key: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, canonical_key__in=canonical_keys)})
+            existing.update({
+                r.canonical_key: r
+                for r in ExtractedRecord.objects.filter(
+                    entity_type=entity_type, canonical_key__in=canonical_keys
+                )
+            })
         if fingerprints:
-            existing.update({r.fingerprint: r for r in ExtractedRecord.objects.filter(entity_type=entity_type, fingerprint__in=fingerprints)})
+            existing.update({
+                r.fingerprint: r
+                for r in ExtractedRecord.objects.filter(
+                    entity_type=entity_type, fingerprint__in=fingerprints
+                )
+            })
 
-    resolved = [existing[values["canonical_key"] or values["fingerprint"]] for values in values_list]
+    resolved = [
+        existing[values["canonical_key"] or values["fingerprint"]]
+        for values in values_list
+    ]
 
-    # Resolve the latest persisted observation once per canonical record.
     previous_by_record = {}
-    for record_id in {record.pk for record, values in zip(resolved, values_list) if values["raw_capture"] is not None}:
+    for record_id in {
+        record.pk
+        for record, values in zip(resolved, values_list)
+        if values["raw_capture"] is not None
+    }:
         previous_by_record[record_id] = (
-            RecordObservation.objects.filter(record_id=record_id)
+            RecordObservation.objects
+            .filter(record_id=record_id)
             .order_by("-observed_at", "-id")
             .first()
         )
@@ -238,7 +313,9 @@ def process_records(
     for record, values in zip(resolved, values_list):
         if values["raw_capture"] is None:
             continue
-        previous = state_by_record.get(record.pk, previous_by_record.get(record.pk))
+        previous = state_by_record.get(
+            record.pk, previous_by_record.get(record.pk)
+        )
         observation = RecordObservation(
             record=record,
             raw_capture=values["raw_capture"],
@@ -251,7 +328,9 @@ def process_records(
         )
         observations.append(observation)
         if previous is not None and previous.fingerprint != values["fingerprint"]:
-            changes = _diff_payload(previous.normalized_payload, values["normalized_payload"])
+            changes = _diff_payload(
+                previous.normalized_payload, values["normalized_payload"]
+            )
             if changes:
                 change_specs.append((record, previous, observation, changes))
         state_by_record[record.pk] = observation
@@ -266,20 +345,26 @@ def process_records(
             record_id__in={record.pk for record in resolved},
             raw_capture_id__in={item.raw_capture_id for item in observations},
         )
-        persisted_map = {(item.record_id, item.raw_capture_id): item for item in persisted}
+        persisted_map = {
+            (item.record_id, item.raw_capture_id): item for item in persisted
+        }
         changes = []
         for record, previous, pending, diff in change_specs:
-            current = persisted_map.get((pending.record_id, pending.raw_capture_id))
+            current = persisted_map.get(
+                (pending.record_id, pending.raw_capture_id)
+            )
             if current is None or current.fingerprint == previous.fingerprint:
                 continue
-            changes.append(RecordChange(
-                record=record,
-                previous_observation=previous,
-                observation=current,
-                changed_fields=[item["field"] for item in diff],
-                before={item["field"]: item["before"] for item in diff},
-                after={item["field"]: item["after"] for item in diff},
-            ))
+            changes.append(
+                RecordChange(
+                    record=record,
+                    previous_observation=previous,
+                    observation=current,
+                    changed_fields=[item["field"] for item in diff],
+                    before={item["field"]: item["before"] for item in diff},
+                    after={item["field"]: item["after"] for item in diff},
+                )
+            )
         if changes:
             RecordChange.objects.bulk_create(
                 changes,
@@ -287,6 +372,7 @@ def process_records(
                 ignore_conflicts=True,
             )
     return resolved
+
 
 def process_record(
     *,
