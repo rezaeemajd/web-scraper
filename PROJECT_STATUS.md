@@ -283,3 +283,31 @@ These are management estimates, not production-completion claims.
 3. Verify dry-run rollback, then persist, then repeat for idempotency.
 4. Add MarketObservation only after a real pharmacy/product relationship is evidenced by source data; do not infer availability from a pharmacy directory page.
 5. Run the multi-domain Gardasil benchmark and inspect source-specific semantics.
+
+
+## 2026-09-20 — CI verification + per-capture transaction hardening + Pillix pharmacy seed
+
+- Latest verified PR head before this documentation update: `ca3a7bc5b877d4b9da1c0697163c7b75e39022a5`.
+- CI for that head is now **PASS** across all four required workflows: Backend, Backend Docker, Frontend Docker and Compose Integration.
+- Transaction hardening is implemented in `cdi_source_discovery`: each capture's persistence work is wrapped in an inner `transaction.atomic()` savepoint. This prevents a single database exception from poisoning the surrounding dry-run transaction while preserving the final dry-run rollback contract.
+- The Pillix source catalog was strengthened with the real public pharmacy directory root `https://pillix.ir/pharmacy` as an additional seed. The existing province/county pharmacy seeds remain; no seed was removed.
+- This seed change is a coverage improvement, not market acceptance. Real isolated crawl is still required to verify extraction, persistence, rollback and idempotency against live Pillix responses.
+- Production remains untouched; no live staging execution is claimed.
+
+### Engineering estimate after this block
+- Overall: **~80% complete / ~20% remaining**
+- Safe Fetch / Provenance: **~90% / ~10%**
+- Pharmacy / Geography: **~72% / ~28%**
+- Real Pharmacy Crawl: **~45% / ~55%**
+- Multi-source Parsing: **~50% / ~50%**
+- Gardasil real-market benchmark: **~60% / ~40%**
+- Observation / Change: **~88% / ~12%**
+
+These remain management estimates, not production-completion claims.
+
+### Next execution block
+1. Use the isolated environment to execute the bounded Pillix pharmacy crawl against the new root seed.
+2. Capture actual dry-run output and verify zero durable DB writes.
+3. Persist the same bounded crawl and inspect provenance/Location/Pharmacy materialization.
+4. Repeat the crawl to verify idempotency without inferring stock or availability.
+5. Then run the real multi-domain Gardasil benchmark and only introduce MarketObservation where source evidence explicitly establishes a product/pharmacy relationship.
