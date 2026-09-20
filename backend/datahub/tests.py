@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from .models import EntityField, EntityType, ExtractedRecord
 from .dedup import find_candidates
@@ -113,7 +115,7 @@ def test_dedup_candidate_refreshes_existing_score_and_fields():
     candidate.refresh_from_db()
 
     assert candidates == [candidate]
-    assert candidate.similarity == "0.7500"
+    assert candidate.similarity == Decimal("0.7500")
     assert candidate.matched_fields == ["city", "name", "phone"]
 
 def test_similarity_is_symmetric_and_ignores_empty_matches():
@@ -430,7 +432,7 @@ def test_dedup_persists_multiple_candidates_in_bulk_and_refreshes_them():
     second = find_candidates(target, limit=3)
     assert len(second) == 3
     assert all(candidate.matched_fields == ["city", "name"] for candidate in second)
-    assert all(candidate.similarity == "1.0000" for candidate in second)
+    assert all(candidate.similarity == Decimal("1.0000") for candidate in second)
 
 
 @pytest.mark.django_db
