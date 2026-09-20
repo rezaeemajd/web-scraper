@@ -192,3 +192,29 @@ def test_capture_url_blocks_private_redirect(monkeypatch):
 
     assert capture.status == RawCapture.Status.BLOCKED
     assert "non-public" in capture.error_message
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("status_code", [408, 429, 500, 502, 503, 504])
+def test_capture_url_marks_retryable_http_status_transient(monkeypatch, status_code):
+    source = Source.objects.create(
+        name=f"Transient {status_code}",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    _FakeClient.responses = [
+        _FakeResponse(
+            source.base_url + "/temporary",
+            body=b"temporary",
+            status_code=status_code,
+        )
+    ]
+    _FakeClient.init_kwargs = []
+    monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
+
+    capture = fetcher.capture_url(source, "https://example.com/temporary")
+
+    assert capture.status == RawCapture.Status.ERROR
+    assert capture.error_message == f"transient:http_status:{status_code}"
