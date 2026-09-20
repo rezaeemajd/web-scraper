@@ -249,3 +249,37 @@ Adapter output دیگر فقط برای شمارش extraction استفاده ن�
 - قیمت Pillix که `0` نمایش داده می‌شود به‌صورت قیمت واقعی parse/interpret نمی‌شود.
 - آخرین head فعلی: `1c514886997fb38692eb3f011710a160e0c4df52`
 - CI برای این head هنوز نتیجه‌ای گزارش نکرده است.
+
+
+## 2026-09-20 — Pharmacy adapter → pipeline integration
+
+- Latest head: `fa6b3ce1918bfbb9cd6d85a77e40c0166609e848`
+- CI on the previous head `1fd2834` is verified: Backend, Backend Docker, Frontend Docker and Compose Integration all completed successfully.
+- Pillix now uses source-specific routing: `/pharmacy/` pages are parsed by `pillix_pharmacy`; other Pillix pages keep the generic adapter.
+- Pharmacy adapter output now follows the same provenance path:
+  `RawCapture → adapter → adapter_record_to_item → process_records → ExtractedRecord/RecordObservation → Pharmacy/Location`.
+- A dedicated `pharmacy` EntityType contract was added to the discovery command with required geographic identity fields; materialization uses the existing `upsert_pharmacy_from_record()` path and does not infer drug availability.
+- Discovery output now reports `pharmacies_materialized` per capture/source.
+- Regression coverage added for source-specific adapter routing and explicit Pillix pharmacy-card extraction.
+- No new database migration was introduced; existing Pharmacy/Location schema is reused.
+- This is still an isolated PR branch. No production server changes or live staging execution are claimed.
+- Real pharmacy acceptance remains pending until an isolated environment can execute the command against the actual Pillix pages.
+
+### Engineering estimate after this block
+
+- Overall: **~79% complete / ~21% remaining**
+- Pharmacy / Geography: **~70% / ~30%**
+- Real Pharmacy Crawl: **~45% / ~55%**
+- Multi-source Parsing: **~50% / ~50%**
+- Gardasil real-market benchmark: **~60% / ~40%**
+- Observation / Change: **~88% / ~12%**
+
+These are management estimates, not production-completion claims.
+
+### Next execution block
+
+1. Check CI once for the new head `fa6b3ce`; do not rerun unchanged workflows.
+2. Run the actual Pillix pharmacy crawl in isolated staging with a small bounded page limit.
+3. Verify dry-run rollback, then persist, then repeat for idempotency.
+4. Add MarketObservation only after a real pharmacy/product relationship is evidenced by source data; do not infer availability from a pharmacy directory page.
+5. Run the multi-domain Gardasil benchmark and inspect source-specific semantics.
