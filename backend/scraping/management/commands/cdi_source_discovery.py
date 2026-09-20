@@ -4,6 +4,8 @@ import httpx
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from datahub.models import EntityField, EntityType
+from datahub.pipeline import adapter_record_to_item, process_records
 from scraping.adapters.registry import get_adapter
 from scraping.discovery import bounded_discovery
 from scraping.source_catalog import SOURCE_SEEDS
@@ -11,18 +13,51 @@ from sources.fetcher import capture_url
 from sources.models import Source
 
 
+PRODUCT_FIELDS = (
+    ("name", "Name", True),
+    ("brand", "Brand", False),
+    ("sku", "SKU", False),
+    ("price", "Price", False),
+    ("currency", "Currency", False),
+    ("availability", "Availability", False),
+    ("observation_type", "Observation Type", False),
+    ("evidence_type", "Evidence Type", False),
+)
+
+
 class DryRunRollback(Exception):
     pass
 
 
 class Command(BaseCommand):
-    help = "Run bounded same-domain discovery across curated healthcare sources."
+    help = "Run bounded same-domain discovery and persist extracted source records."
 
     def add_arguments(self, parser):
         parser.add_argument("--source", action="append", dest="sources")
         parser.add_argument("--persist", action="store_true")
         parser.add_argument("--max-pages", type=int, default=3)
         parser.add_argument("--max-urls", type=int, default=25)
+
+    def _product_entity(self):
+        entity_type, _ = EntityType.objects.get_or_create(
+            slug="product",
+            defaults={
+                "name": "Product",
+                "description": "Generic product observations extracted from public sources.",
+            },
+        )
+        for slug, name, required in PRODUCT_FIELDS:
+            EntityField.objects.get_or_create(
+                entity_type=entity_type,
+                slug=slug,
+                defaults={
+                    "name": name,
+                    "required": required,
+                    "searchable": True,
+                    "is_identifier": slug == "sku",
+                },
+            )
+        return entity_type
 
     def handle(self, *args, **options):
         selected = options.get("sources")
@@ -57,9 +92,14 @@ class Command(BaseCommand):
                 source.name = item["name"]
                 source.base_url = item["base_url"]
                 source.respect_robots = True
-                source.rate_limit_per_minute = max(1, source.rate_limit_per_minute or 10)
+                source.rate_limit_per_minute = max(
+                    1, source.rate_limit_per_minute or 10
+                )
                 source.max_response_bytes = min(
-                    max(64 * 1024, source.max_response_bytes or 5 * 1024 * 1024),
+                    max(
+                        64 * 1024,
+                        source.max_response_bytes or 5 * 1024 * 1024,
+                    ),
                     5 * 1024 * 1024,
                 )
                 source.save(update_fields=[
@@ -96,7 +136,10 @@ class Command(BaseCommand):
                 adapter = get_adapter(item["adapter"])
                 captures = []
                 extracted_records = 0
+                persisted_records = 0
                 extraction_errors = []
+                entity_type = None
+
                 for url, capture in pages:
                     entry = {
                         "url": url,
@@ -105,18 +148,39 @@ class Command(BaseCommand):
                         "bytes": len(capture.body.encode("utf-8")),
                         "error": capture.error_message,
                         "extracted_records": 0,
+                        "persisted_records": 0,
                     }
                     if capture.status == capture.Status.SUCCESS:
                         try:
                             records = adapter(capture.body, url)
                             entry["extracted_records"] = len(records)
                             extracted_records += len(records)
+                            if records:
+                                if entity_type is None:
+                                    entity_type = self._product_entity()
+                                items = [
+                                    adapter_record_to_item(
+                                        record,
+                                        source_domain=item["domain"],
+                                        raw_capture=capture,
+                                        source_url=url,
+                                    )
+                                    for record in records
+                                ]
+                                persisted = process_records(
+                                    entity_type=entity_type,
+                                    items=items,
+                                )
+                                entry["persisted_records"] = len(persisted)
+                                persisted_records += len(persisted)
                         except Exception as exc:
                             entry["extraction_error"] = str(exc)[:500]
-                            extraction_errors.append(
-                                {"url": url, "error": str(exc)[:500]}
-                            )
+                            extraction_errors.append({
+                                "url": url,
+                                "error": str(exc)[:500],
+                            })
                     captures.append(entry)
+
                 results.append({
                     "source": item["key"],
                     "domain": item["domain"],
@@ -124,6 +188,7 @@ class Command(BaseCommand):
                     "adapter": item["adapter"],
                     "pages_discovered_and_fetched": len(pages),
                     "records_extracted": extracted_records,
+                    "records_persisted": persisted_records,
                     "extraction_errors": extraction_errors,
                     "captures": captures,
                 })
@@ -151,9 +216,7 @@ class Command(BaseCommand):
         )
         result = {
             "sources_checked": len(results),
-            "pages_checked": sum(
-                len(item["captures"]) for item in results
-            ),
+            "pages_checked": sum(len(item["captures"]) for item in results),
             "successful_captures": successful,
             "max_pages_per_source": options["max_pages"],
             "max_urls_per_source": options["max_urls"],
