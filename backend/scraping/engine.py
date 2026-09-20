@@ -158,33 +158,39 @@ def execute_many(scraper: Scraper):
     records = []
     captures = []
 
-    for _ in range(max_pages):
-        if current_url in visited:
-            break
-        visited.add(current_url)
+    with httpx.Client(
+        timeout=httpx.Timeout(20.0, connect=10.0),
+        follow_redirects=False,
+        trust_env=False,
+        headers={"User-Agent": scraper.source.user_agent},
+    ) as client:
+        for _ in range(max_pages):
+            if current_url in visited:
+                break
+            visited.add(current_url)
 
-        capture = capture_url(scraper.source, current_url)
-        captures.append(capture)
-        if capture.status != capture.Status.SUCCESS:
-            break
+            capture = capture_url(scraper.source, current_url, client=client)
+            captures.append(capture)
+            if capture.status != capture.Status.SUCCESS:
+                break
 
-        payloads, evidences = _extract_static_html_many(config, capture.body)
-        for payload, evidence in zip(payloads, evidences):
-            records.append(
-                process_record(
-                    entity_type=scraper.entity_type,
-                    url=current_url,
-                    payload=payload,
-                    raw_capture=capture,
-                    evidence=evidence,
-                    source_domain=scraper.source.domain,
+            payloads, evidences = _extract_static_html_many(config, capture.body)
+            for payload, evidence in zip(payloads, evidences):
+                records.append(
+                    process_record(
+                        entity_type=scraper.entity_type,
+                        url=current_url,
+                        payload=payload,
+                        raw_capture=capture,
+                        evidence=evidence,
+                        source_domain=scraper.source.domain,
+                    )
                 )
-            )
 
-        next_url = _next_page_url(config, capture.body, current_url)
-        if not next_url:
-            break
-        current_url = next_url
+            next_url = _next_page_url(config, capture.body, current_url)
+            if not next_url:
+                break
+            current_url = next_url
 
     return records, captures
 
