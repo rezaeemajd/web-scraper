@@ -6,7 +6,7 @@ class EntityType(models.Model):
     class Meta: ordering=["name"]
 class EntityField(models.Model):
     class DataType(models.TextChoices): TEXT="text","Text"; INTEGER="integer","Integer"; DECIMAL="decimal","Decimal"; BOOLEAN="boolean","Boolean"; DATE="date","Date"; URL="url","URL"; JSON="json","JSON"
-    entity_type=models.ForeignKey(EntityType,on_delete=models.CASCADE,related_name="fields"); name=models.CharField(max_length=100); slug=models.SlugField(max_length=100); data_type=models.CharField(max_length=20,choices=DataType.choices,default=DataType.TEXT); required=models.BooleanField(default=False); searchable=models.BooleanField(default=True); normalizer=models.CharField(max_length=100,blank=True); validators_config=models.JSONField(default=dict,blank=True); position=models.PositiveIntegerField(default=0)
+    entity_type=models.ForeignKey(EntityType,on_delete=models.CASCADE,related_name="fields"); name=models.CharField(max_length=100); slug=models.SlugField(max_length=100); data_type=models.CharField(max_length=20,choices=DataType.choices,default=DataType.TEXT); required=models.BooleanField(default=False); searchable=models.BooleanField(default=True); is_identifier=models.BooleanField(default=False); is_blocking=models.BooleanField(default=False); normalizer=models.CharField(max_length=100,blank=True); validators_config=models.JSONField(default=dict,blank=True); position=models.PositiveIntegerField(default=0)
     class Meta: ordering=["position","id"]; constraints=[models.UniqueConstraint(fields=["entity_type","slug"],name="uniq_entity_field_slug")]
 class Location(models.Model):
     parent=models.ForeignKey("self",on_delete=models.PROTECT,null=True,blank=True,related_name="children"); country=models.CharField(max_length=100,default="ایران",db_index=True,blank=True); province=models.CharField(max_length=100,blank=True,db_index=True); city=models.CharField(max_length=100,blank=True,db_index=True); district=models.CharField(max_length=100,blank=True,db_index=True); address=models.TextField(blank=True); normalized_address=models.TextField(blank=True); latitude=models.DecimalField(max_digits=9,decimal_places=6,null=True,blank=True); longitude=models.DecimalField(max_digits=9,decimal_places=6,null=True,blank=True); created_at=models.DateTimeField(auto_now_add=True,null=True); updated_at=models.DateTimeField(auto_now=True,null=True)
@@ -26,7 +26,8 @@ class ExtractedRecord(models.Model):
                 opclasses=["jsonb_path_ops"],
             ),
         ]
-        constraints=[models.UniqueConstraint(fields=["entity_type","fingerprint"],condition=~Q(fingerprint=""),name="uniq_entity_record_fingerprint")]
+        constraints=[models.UniqueConstraint(fields=["entity_type","fingerprint"],condition=~Q(fingerprint=""),name="uniq_entity_record_fingerprint"),
+            models.UniqueConstraint(fields=["entity_type","canonical_key"],condition=~Q(canonical_key=""),name="uniq_entity_record_canonical_key")]
 class RecordObservation(models.Model):
     record=models.ForeignKey(ExtractedRecord,on_delete=models.CASCADE,related_name="observations")
     raw_capture=models.ForeignKey(RawCapture,on_delete=models.SET_NULL,null=True,blank=True,related_name="observations")
