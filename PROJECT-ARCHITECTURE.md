@@ -242,6 +242,10 @@ MarketObservation
 
 Do not encode current stock as a permanent Product property.
 
+### Current PR implementation
+
+The active P1 branch now contains Pharmacy and MarketObservation model/API foundations plus migration 0010. They remain isolated in the PR until CI and real-data acceptance are completed.
+
 ## 10. Frontend target
 
 Next.js + React + TypeScript + Tailwind.
