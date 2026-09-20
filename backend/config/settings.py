@@ -99,7 +99,10 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIP
 CELERY_RESULT_EXPIRES = int(os.getenv("CELERY_RESULT_EXPIRES", "86400"))
 CELERY_TASK_ROUTES = {
     "scraping.tasks.run_scraper": {"queue": "scraping"},
+    "exports.tasks.run_export": {"queue": "exports"},
 }
 
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "2400"))
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "2700"))
+
+EXPORT_ROOT = os.getenv("EXPORT_ROOT", str(BASE_DIR / "exports"))
