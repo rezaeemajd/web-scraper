@@ -3,6 +3,7 @@ import ipaddress
 import socket
 import urllib.robotparser
 import json
+import time
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -78,9 +79,14 @@ def _bounded_response_text(response, max_bytes: int) -> str:
 
 
 def _rate_limit(source: Source) -> None:
-    interval = max(1, int(60 / max(source.rate_limit_per_minute, 1)))
-    key = f"cdi:source-rate:{source.pk}"
-    if not cache.add(key, "1", timeout=interval):
+    # Fixed one-minute window: atomic Redis INCR avoids the old one-second
+    # granularity, which incorrectly capped every source at 60 requests/minute.
+    limit = max(1, source.rate_limit_per_minute)
+    window = int(time.time() // 60)
+    key = f"cdi:source-rate:{source.pk}:{window}"
+    cache.add(key, 0, timeout=61)
+    count = cache.incr(key)
+    if count > limit:
         raise FetchBlocked("source rate limit exceeded")
 
 
