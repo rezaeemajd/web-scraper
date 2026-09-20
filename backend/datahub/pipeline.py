@@ -3,7 +3,7 @@ import json
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from .models import ExtractedRecord
 
@@ -68,21 +68,20 @@ def quality_score(payload, entity_type, errors, *, fields=None):
     return Decimal(str(round(max(0.0, filled / len(fields) - penalty), 4)))
 
 
-def process_record(
+def _build_values(
     *,
     entity_type,
     url,
     payload,
-    raw_capture=None,
-    evidence=None,
-    source_domain=None,
-    fields=None,
+    raw_capture,
+    evidence,
+    source_domain,
+    fields,
 ):
     normalized = normalize_value(payload)
-    fields = list(fields) if fields is not None else list(entity_type.fields.all())
     errors = validate_payload(entity_type, normalized, fields=fields)
     score = quality_score(normalized, entity_type, errors, fields=fields)
-    values = {
+    return {
         "raw_capture": raw_capture,
         "source_url": canonical_url(url),
         "source_domain": source_domain
@@ -100,15 +99,104 @@ def process_record(
             else ExtractedRecord.Status.PARSED
         ),
     }
-    try:
-        record, _ = ExtractedRecord.objects.get_or_create(
+
+
+def process_records(
+    *,
+    entity_type,
+    items,
+    fields=None,
+    batch_size=100,
+):
+    """Persist many extracted observations with one lookup and batched inserts.
+
+    Existing fingerprints are intentionally left unchanged: the canonical record
+    is immutable for this ingestion pass, while raw capture/evidence remain
+    attached to the first observation. The returned list preserves input order.
+    """
+    items = list(items)
+    if not items:
+        return []
+
+    fields = list(fields) if fields is not None else list(entity_type.fields.all())
+    values_list = [
+        _build_values(
             entity_type=entity_type,
-            fingerprint=values["fingerprint"],
-            defaults=values,
+            url=item["url"],
+            payload=item["payload"],
+            raw_capture=item.get("raw_capture"),
+            evidence=item.get("evidence"),
+            source_domain=item.get("source_domain"),
+            fields=fields,
         )
-    except IntegrityError:
-        record = ExtractedRecord.objects.get(
+        for item in items
+    ]
+
+    # Collapse duplicate fingerprints inside the same page before INSERT. This
+    # avoids unnecessary unique-index work for repeated cards/rows.
+    unique_values = {}
+    for values in values_list:
+        unique_values.setdefault(values["fingerprint"], values)
+
+    fingerprints = list(unique_values)
+    existing = {
+        record.fingerprint: record
+        for record in ExtractedRecord.objects.filter(
             entity_type=entity_type,
-            fingerprint=values["fingerprint"],
+            fingerprint__in=fingerprints,
         )
-    return record
+    }
+
+    missing = [
+        values for fp, values in unique_values.items()
+        if fp not in existing
+    ]
+    if missing:
+        new_records = [
+            ExtractedRecord(entity_type=entity_type, **values)
+            for values in missing
+        ]
+        try:
+            with transaction.atomic():
+                ExtractedRecord.objects.bulk_create(
+                    new_records,
+                    batch_size=max(1, int(batch_size)),
+                )
+        except IntegrityError:
+            # Another worker may have inserted the same fingerprint between
+            # the SELECT and INSERT. Re-read the complete key set and return
+            # canonical rows rather than creating/returning duplicates.
+            pass
+
+        existing.update({
+            record.fingerprint: record
+            for record in ExtractedRecord.objects.filter(
+                entity_type=entity_type,
+                fingerprint__in=fingerprints,
+            )
+        })
+
+    return [existing[values["fingerprint"]] for values in values_list]
+
+
+def process_record(
+    *,
+    entity_type,
+    url,
+    payload,
+    raw_capture=None,
+    evidence=None,
+    source_domain=None,
+    fields=None,
+):
+    return process_records(
+        entity_type=entity_type,
+        items=[{
+            "url": url,
+            "payload": payload,
+            "raw_capture": raw_capture,
+            "evidence": evidence,
+            "source_domain": source_domain,
+        }],
+        fields=fields,
+    )[0]
