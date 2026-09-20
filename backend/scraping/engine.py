@@ -125,13 +125,12 @@ def extract_static_html(scraper: Scraper, html: str):
     return payloads[0], evidences[0]
 
 
-def _next_page_url(config, html, current_url):
+def _next_page_url_from_tree(config, tree, current_url):
     pagination = config.get("pagination") or {}
     selector = pagination.get("next_selector")
     if not selector:
         return None
 
-    tree = LexborHTMLParser(html)
     try:
         node = tree.css_first(selector)
     except Exception as exc:
@@ -145,6 +144,46 @@ def _next_page_url(config, html, current_url):
     if not href:
         return None
     return urljoin(current_url, href)
+
+
+def _next_page_url(config, html, current_url):
+    return _next_page_url_from_tree(
+        config,
+        LexborHTMLParser(html),
+        current_url,
+    )
+
+
+def _extract_page(config, html, current_url):
+    """Parse a fetched page once for both extraction and pagination."""
+    tree = LexborHTMLParser(html)
+    record_selector = config.get("record_selector")
+    if record_selector:
+        try:
+            nodes = tree.css(record_selector)
+        except Exception as exc:
+            raise ScraperConfigError(
+                f"invalid record_selector: {exc}"
+            ) from exc
+    else:
+        nodes = [tree]
+
+    payloads = []
+    evidences = []
+    for index, node in enumerate(nodes):
+        payload, evidence = _extract_payload(
+            node,
+            config["fields"],
+            evidence_prefix=f"record:{index}" if record_selector else "",
+        )
+        payloads.append(payload)
+        evidences.append(evidence)
+
+    return (
+        payloads,
+        evidences,
+        _next_page_url_from_tree(config, tree, current_url),
+    )
 
 
 def _batched(items, size):
@@ -188,7 +227,11 @@ def execute_many(scraper: Scraper, *, collect_records=True):
             if capture.status != capture.Status.SUCCESS:
                 break
 
-            payloads, evidences = _extract_static_html_many(config, capture.body)
+            payloads, evidences, next_url = _extract_page(
+                config,
+                capture.body,
+                current_url,
+            )
             page_items = [
                 {
                     "url": current_url,
@@ -210,7 +253,6 @@ def execute_many(scraper: Scraper, *, collect_records=True):
                 if collect_records:
                     records.extend(persisted)
 
-            next_url = _next_page_url(config, capture.body, current_url)
             if not next_url:
                 break
             current_url = next_url
