@@ -186,7 +186,6 @@ def _iter_page_items(config, html, current_url, capture, source_domain):
     return tree, iterator()
 
 
-
 def _batched(items, size):
     batch = []
     for item in items:
@@ -230,13 +229,26 @@ def execute_many(
                 break
             visited.add(current_url)
 
-            capture = capture_url(scraper.source, current_url, client=client)
+            try:
+                capture = capture_url(scraper.source, current_url, client=client)
+            except TypeError as exc:
+                # Preserve compatibility with simple test adapters and legacy
+                # source plugins that expose capture_url(source, url).
+                if "unexpected keyword argument 'client'" not in str(exc):
+                    raise
+                capture = capture_url(scraper.source, current_url)
+
             if collect_captures:
                 captures.append(capture)
             if capture.status != capture.Status.SUCCESS:
                 if progress_callback is not None:
                     progress_callback(capture, pages_fetched, record_count)
                 break
+
+            # capture_url normally returns a persisted RawCapture. Saving an
+            # unsaved adapter capture keeps the pipeline's FK contract explicit.
+            if capture.pk is None:
+                capture.save()
 
             tree, page_items = _iter_page_items(
                 config,
