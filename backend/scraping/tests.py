@@ -604,3 +604,24 @@ def test_execute_many_can_stream_without_retaining_captures(monkeypatch):
         ("https://example.com/page/1", 1, 1),
         ("https://example.com/page/2", 2, 2),
     ]
+
+
+def test_scraper_lock_refresh_requires_same_token():
+    from scraping import tasks
+
+    class FakeRedis:
+        def __init__(self, result):
+            self.result = result
+            self.calls = []
+
+        def eval(self, script, key_count, key, token, ttl):
+            self.calls.append((script, key_count, key, token, ttl))
+            return self.result
+
+    client = FakeRedis(1)
+    tasks._refresh_scraper_lock(client, "lock:key", "token")
+    assert client.calls[0][2:] == ("lock:key", "token", tasks._LOCK_TTL_SECONDS)
+
+    lost = FakeRedis(0)
+    with pytest.raises(tasks.DuplicateScraperRun, match="lock lease was lost"):
+        tasks._refresh_scraper_lock(lost, "lock:key", "token")
