@@ -13,6 +13,7 @@ SOURCE_SEEDS = [
         "base_url": "https://pillix.ir",
         "seeds": [
             "https://pillix.ir/medicine",
+            "https://pillix.ir/pharmacy",
             "https://pillix.ir/pharmacy/province-tehran",
             "https://pillix.ir/pharmacy/county-tehran",
         ],
