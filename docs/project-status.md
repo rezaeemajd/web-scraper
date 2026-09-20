@@ -121,3 +121,13 @@ Production/Cofinets/Nginx دستکاری نشود؛ Foundation merge نشود ت
 بر اساس ساختار واقعی صفحات Pillix، Pharmacy به‌صورت مستقل از Product طراحی شد. مدل Pharmacy شامل نام، Location، منبع، URL، نوع، ساعات، تلفن عمومی، وب‌سایت و evidence است. MarketObservation به Pharmacy + ExtractedRecord + RawCapture متصل است و availability/price را به‌صورت observation زمانی نگه می‌دارد؛ موجودی دائمی روی Product ثبت نمی‌شود.
 
 پیاده‌سازی فعلی در PR branch انجام شده و شامل model، migration 0010، serializer و endpointهای API است. قبل از پذیرش نهایی باید migration/CI و سپس crawl واقعی isolated اجرا شود.
+
+
+## 2026-09-20 — CI root-cause fix + structured extraction hardening
+
+- CI on head `6540ce7` reached the migration consistency gate and failed because Django generated six index-renaming operations for Pharmacy/MarketObservation.
+- Root cause: `0010_pharmacy_market_observation.py` contained stable generated index names while the models declared the same indexes without explicit names.
+- Fixed on head `f3affe3` by explicitly pinning those six model index names to the migration names; no extra migration was introduced.
+- During code review of the same path, a real extraction bug was found: `execute_many()` passed only CSS `fields` into `_extract_payload()`, silently dropping configured `label_table` and `regex_fields`.
+- Fixed on head `3d047d0` and added a regression test on head `b398626` covering label-table and regex extraction through the actual paged execution path.
+- The next CI result must validate both fixes; no CI rerun was manually triggered.
