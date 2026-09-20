@@ -33,7 +33,7 @@ class Migration(migrations.Migration):
                     models.Index(fields=["location", "active"], name="pharm_loc_active_idx"),
                 ],
                 "constraints": [
-                    models.UniqueConstraint(fields=("source_domain", "source_url"), name="uniq_pharmacy_source_url"),
+                    models.UniqueConstraint(fields=("source_domain", "canonical_key"), name="uniq_pharmacy_canonical_key"),
                 ],
             },
         ),
