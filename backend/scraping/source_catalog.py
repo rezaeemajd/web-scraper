@@ -18,6 +18,13 @@ SOURCE_SEEDS = [
         ],
         "capabilities": ["drug", "pharmacy", "market_search"],
         "adapter": "generic",
+        "adapter_routes": [
+            {
+                "prefix": "/pharmacy/",
+                "adapter": "pillix_pharmacy",
+                "entity_type": "pharmacy",
+            },
+        ],
     },
     {
         "key": "darooha",
