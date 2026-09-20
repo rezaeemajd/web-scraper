@@ -1,4 +1,5 @@
 from django.db import migrations, models
+from django.db.models import Q
 import django.db.models.deletion
 
 
@@ -62,7 +63,7 @@ class Migration(migrations.Migration):
                     models.Index(fields=["availability", "-observed_at"], name="datahub_mark_availab_0cda48_idx"),
                 ],
                 "constraints": [
-                    models.UniqueConstraint(condition=django.db.models.Q(raw_capture__isnull=False), fields=("pharmacy", "record", "raw_capture"), name="uniq_market_observation_capture"),
+                    models.UniqueConstraint(condition=Q(raw_capture__isnull=False), fields=("pharmacy", "record", "raw_capture"), name="uniq_market_observation_capture"),
                 ],
             },
         ),
