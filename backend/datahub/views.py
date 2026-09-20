@@ -20,6 +20,7 @@ from .serializers import (
     DedupCandidateSerializer,
     EntityFieldSerializer,
     EntityTypeSerializer,
+    ExtractedRecordListSerializer,
     ExtractedRecordSerializer,
     LocationSerializer,
     RawCaptureListSerializer,
@@ -77,6 +78,22 @@ class ExtractedRecordViewSet(viewsets.ModelViewSet):
     search_fields = ["source_domain", "source_url", "status", "canonical_key"]
     filterset_fields = ["entity_type", "status", "source_domain"]
     ordering_fields = ["collected_at", "quality_score", "confidence"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == "list":
+            return queryset.defer(
+                "payload",
+                "normalized_payload",
+                "evidence",
+                "validation_errors",
+            )
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ExtractedRecordListSerializer
+        return ExtractedRecordSerializer
 
 
 class DedupCandidateViewSet(viewsets.ModelViewSet):
