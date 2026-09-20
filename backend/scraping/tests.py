@@ -117,6 +117,45 @@ def test_execute_many_applies_label_table_and_regex_fields(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_execute_many_can_use_explicit_start_url_without_mutating_scraper(monkeypatch):
+    from datahub.models import ExtractedRecord, RawCapture
+
+    source = Source.objects.create(
+        name="Explicit URL Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="دارو", slug="explicit-url-drug")
+    original_url = "https://example.com/original"
+    target_url = "https://example.com/variant"
+    scraper = Scraper.objects.create(
+        name="Explicit URL scraper",
+        source=source,
+        start_url=original_url,
+        entity_type=entity,
+        extraction_config={"fields": {"name": "h1"}},
+    )
+    capture = RawCapture(
+        url=target_url,
+        status_code=200,
+        body="<h1>گارداسیل 9</h1>",
+        status=RawCapture.Status.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "scraping.engine.capture_url",
+        lambda source, url, *, client=None: capture,
+    )
+
+    records, captures = execute_many(scraper, start_url=target_url)
+
+    scraper.refresh_from_db()
+    assert scraper.start_url == original_url
+    assert captures[0].url == target_url
+    assert ExtractedRecord.objects.get(pk=records[0].pk).source_url == target_url
+
+
+@pytest.mark.django_db
 def test_run_scraper_records_success(monkeypatch):
     from datahub.models import RawCapture
     from .tasks import run_scraper
