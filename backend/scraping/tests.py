@@ -472,7 +472,6 @@ def test_execute_many_batches_duplicate_records_before_persisting(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.django_db
 def test_execute_many_can_skip_record_object_retention(monkeypatch):
     from datahub.models import ExtractedRecord, RawCapture
 
