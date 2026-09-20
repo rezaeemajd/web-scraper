@@ -62,7 +62,7 @@ class Migration(migrations.Migration):
                     models.Index(fields=["availability", "-observed_at"], name="datahub_mark_availab_0cda48_idx"),
                 ],
                 "constraints": [
-                    models.UniqueConstraint(fields=("pharmacy", "record", "source_url", "observed_at"), name="uniq_market_observation_point"),
+                    models.UniqueConstraint(condition=django.db.models.Q(raw_capture__isnull=False), fields=("pharmacy", "record", "raw_capture"), name="uniq_market_observation_capture"),
                 ],
             },
         ),
