@@ -165,7 +165,8 @@ class MarketObservation(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["pharmacy", "record", "source_url", "observed_at"],
-                name="uniq_market_observation_point",
+                fields=["pharmacy", "record", "raw_capture"],
+                condition=Q(raw_capture__isnull=False),
+                name="uniq_market_observation_capture",
             ),
         ]
