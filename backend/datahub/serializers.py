@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import EntityType,EntityField,Location,RawCapture,ExtractedRecord,DedupCandidate,ReviewTask,AuditEvent,RecordObservation,RecordChange
+from .models import EntityType,EntityField,Location,RawCapture,ExtractedRecord,DedupCandidate,ReviewTask,AuditEvent,RecordObservation,RecordChange,Pharmacy,MarketObservation
 class EntityFieldSerializer(serializers.ModelSerializer):
     class Meta: model=EntityField; fields="__all__"
 class EntityTypeSerializer(serializers.ModelSerializer):
@@ -65,3 +65,16 @@ class RecordChangeSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecordChange
         fields = "__all__"
+
+class PharmacySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Pharmacy
+        fields = "__all__"
+        read_only_fields = ["first_seen_at", "last_seen_at"]
+
+
+class MarketObservationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarketObservation
+        fields = "__all__"
+        read_only_fields = ["created_at"]
