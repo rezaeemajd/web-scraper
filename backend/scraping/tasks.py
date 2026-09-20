@@ -109,11 +109,14 @@ def run_scraper(self, scraper_id):
                 started_at=timezone.now(),
             )
         try:
-            records, captures = execute_many(locked_scraper)
+            _, captures, record_count = execute_many(
+                locked_scraper,
+                collect_records=False,
+            )
             run.pages_fetched = sum(
                 1 for item in captures if item.status == item.Status.SUCCESS
             )
-            run.records_extracted = len(records)
+            run.records_extracted = record_count
             capture = captures[-1] if captures else None
             if capture is None:
                 raise RuntimeError("scraper produced no capture")
