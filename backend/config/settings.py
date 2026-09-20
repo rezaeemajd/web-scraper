@@ -98,3 +98,6 @@ CELERY_RESULT_EXPIRES = int(os.getenv("CELERY_RESULT_EXPIRES", "86400"))
 CELERY_TASK_ROUTES = {
     "scraping.tasks.run_scraper": {"queue": "scraping"},
 }
+
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "2400"))
+CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "2700"))
