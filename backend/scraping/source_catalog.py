@@ -56,6 +56,21 @@ SOURCE_SEEDS = [
         "adapter": "generic",
     },
     {
+        "key": "digikala",
+        "name": "Digikala",
+        "domain": "digikala.com",
+        "base_url": "https://www.digikala.com",
+        "seeds": ["https://www.digikala.com/"],
+        "capabilities": [
+            "retail_product",
+            "retail_price",
+            "health_product",
+            "medical_equipment",
+            "supplement",
+        ],
+        "adapter": "generic",
+    },
+    {
         "key": "digikala_pharmacy",
         "name": "Digikala Pharmacy",
         "domain": "pharmacy.digikala.com",
