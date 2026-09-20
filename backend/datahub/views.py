@@ -15,6 +15,8 @@ from .models import (
     RecordChange,
     RecordObservation,
     ReviewTask,
+    Pharmacy,
+    MarketObservation,
 )
 from .review import transition_review_task
 from .serializers import (
@@ -30,6 +32,8 @@ from .serializers import (
     RecordChangeSerializer,
     RecordObservationSerializer,
     ReviewTaskSerializer,
+    PharmacySerializer,
+    MarketObservationSerializer,
 )
 
 
@@ -176,3 +180,23 @@ class RecordChangeViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [StaffWritePermission]
     filterset_fields = ["record"]
     ordering_fields = ["detected_at"]
+
+
+class PharmacyViewSet(viewsets.ModelViewSet):
+    queryset = Pharmacy.objects.select_related("location").order_by("-last_seen_at", "-id")
+    serializer_class = PharmacySerializer
+    permission_classes = [StaffWritePermission]
+    search_fields = ["name", "source_domain", "pharmacy_type", "public_phone"]
+    filterset_fields = ["location", "source_domain", "pharmacy_type", "active"]
+    ordering_fields = ["name", "first_seen_at", "last_seen_at"]
+
+
+class MarketObservationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MarketObservation.objects.select_related(
+        "pharmacy", "record", "raw_capture"
+    ).order_by("-observed_at", "-id")
+    serializer_class = MarketObservationSerializer
+    permission_classes = [StaffWritePermission]
+    search_fields = ["source_domain", "source_url", "availability", "price_text"]
+    filterset_fields = ["pharmacy", "record", "source_domain", "availability"]
+    ordering_fields = ["observed_at", "price"]
