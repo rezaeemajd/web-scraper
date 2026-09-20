@@ -15,12 +15,30 @@ class RawCaptureListSerializer(serializers.ModelSerializer):
         model = RawCapture
         exclude = ["body", "headers"]
 class ExtractedRecordSerializer(serializers.ModelSerializer):
-    class Meta: model=ExtractedRecord; fields="__all__"; read_only_fields=["normalized_payload","fingerprint","quality_score","validation_errors","status","collected_at","updated_at"]
+    class Meta:
+        model = ExtractedRecord
+        fields = "__all__"
+        read_only_fields = [
+            "normalized_payload",
+            "fingerprint",
+            "quality_score",
+            "validation_errors",
+            "status",
+            "collected_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs):
         if "status" in self.initial_data:
             raise serializers.ValidationError({"status": "status is managed by the workflow"})
         return super().validate(attrs)
+
+
+class ExtractedRecordListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExtractedRecord
+        exclude = ["payload", "normalized_payload", "evidence", "validation_errors"]
+
 class DedupCandidateSerializer(serializers.ModelSerializer):
     class Meta: model=DedupCandidate; fields="__all__"; read_only_fields=["status","created_at"]
 
