@@ -484,3 +484,18 @@ This code path is ready for isolated execution, but it is not yet marked as real
 4. provenance inspection.
 
 No Production topology or existing Cofinets service is changed by this branch.
+
+
+## 2026-09-20 — Pharmacy discovery coverage + transaction isolation
+
+### Pillix pharmacy discovery
+The curated Pillix source now includes the public pharmacy directory root `/pharmacy` in addition to province/county seeds. This improves bounded discovery coverage while preserving source-first routing:
+
+`pillix.ir/pharmacy/* → pillix_pharmacy → pharmacy entity pipeline`
+
+The root is a discovery seed only; it does not change the semantic rule that directory listings cannot be interpreted as current drug stock.
+
+### Capture-level transaction boundary
+Persistence performed by `cdi_source_discovery` is isolated per capture with a nested Django `transaction.atomic()` block. In an outer dry-run transaction this provides a savepoint boundary so one malformed capture can roll back its own database work without invalidating subsequent captures; the outer transaction is still explicitly rolled back at the end of dry-run. In persist mode each capture retains an atomic database boundary.
+
+This is an operational reliability improvement; it does not alter the public data model or production topology.
