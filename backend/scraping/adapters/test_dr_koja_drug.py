@@ -1,6 +1,6 @@
 import pytest
 
-from .dr_koja_drug import extract_drugs
+from scraping.adapters.dr_koja_drug import extract_drugs
 
 
 def test_extract_drugs_uses_drug_detail_links_and_keeps_provenance():
