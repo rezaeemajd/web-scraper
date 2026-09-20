@@ -144,8 +144,8 @@ def test_capture_url_enforces_source_rate_limit(monkeypatch):
     _FakeClient.responses = [_FakeResponse("https://example.com/page", body=b"ok")]
     _FakeClient.init_kwargs = []
     monkeypatch.setattr(fetcher.httpx, "Client", _FakeClient)
-    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: True)
-    monkeypatch.setattr(fetcher.cache, "incr", lambda *args, **kwargs: 2)
+    monkeypatch.setattr(fetcher.cache, "add", lambda *args, **kwargs: False)
+    monkeypatch.setattr(fetcher.cache, "incr", lambda *args, **kwargs: 61)
 
     capture = fetcher.capture_url(source, "https://example.com/page")
 
