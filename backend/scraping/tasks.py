@@ -14,6 +14,10 @@ class DuplicateScraperRun(RuntimeError):
     """Raised when a scraper already has an active task."""
 
 
+class RetryableScraperRun(RuntimeError):
+    """Raised when the last fetch failed with a transient network error."""
+
+
 _LOCK_TTL_SECONDS = 2 * 60 * 60
 _RELEASE_LOCK_SCRIPT = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -44,7 +48,14 @@ def _release_scraper_lock(client, key, token):
         client.close()
 
 
-@shared_task(bind=True)
+@shared_task(
+    bind=True,
+    autoretry_for=(RetryableScraperRun,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3,
+)
 def run_scraper(self, scraper_id):
     scraper = Scraper.objects.select_related("source", "entity_type").get(pk=scraper_id)
     if not scraper.active:
@@ -95,6 +106,8 @@ def run_scraper(self, scraper_id):
             )
             if run.status == ScraperRun.Status.FAILED:
                 run.error_message = capture.error_message
+                if capture.error_message.startswith("transient:"):
+                    raise RetryableScraperRun(capture.error_message)
         except Exception as exc:
             run.status = ScraperRun.Status.FAILED
             run.error_message = str(exc)[:4000]
