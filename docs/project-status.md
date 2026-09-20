@@ -30,7 +30,7 @@
 - Foundation: cdi-v1-foundation @ c072da00dfce2d3c5c27b11c499a73c45343c95b
 - P1: cdi-v1-p1-core-data-engine
 - PR #1: feat: CDI P1 core data engine — OPEN / DRAFT / NOT MERGED
-- آخرین commit branch: 09c846376e6dcc5fd0a1b84650b200ae20faf0c0
+- آخرین commit branch: 6c9013e41c52c5283b0a66953e7603c48f7df344
 - force-push/reset/delete نسخه‌ها ممنوع.
 
 ## CI و اصلاحات اخیر
@@ -114,3 +114,10 @@ Django + PostgreSQL + Redis + Celery + HTTPX + Selectolax/Lexbor؛ bounded fetch
 ## قواعد سخت
 
 Production/Cofinets/Nginx دستکاری نشود؛ Foundation merge نشود تا acceptance کامل و تصمیم صریح؛ market benchmark فقط با داده واقعی؛ live crawl bounded و rate-limited؛ تست تکراری بی‌هدف ممنوع؛ هر تغییر مهم در همین فایل ثبت شود.
+
+
+## فاز Pharmacy + MarketObservation — شروع شده
+
+بر اساس ساختار واقعی صفحات Pillix، Pharmacy به‌صورت مستقل از Product طراحی شد. مدل Pharmacy شامل نام، Location، منبع، URL، نوع، ساعات، تلفن عمومی، وب‌سایت و evidence است. MarketObservation به Pharmacy + ExtractedRecord + RawCapture متصل است و availability/price را به‌صورت observation زمانی نگه می‌دارد؛ موجودی دائمی روی Product ثبت نمی‌شود.
+
+پیاده‌سازی فعلی در PR branch انجام شده و شامل model، migration 0010، serializer و endpointهای API است. قبل از پذیرش نهایی باید migration/CI و سپس crawl واقعی isolated اجرا شود.
