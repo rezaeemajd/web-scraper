@@ -1,8 +1,10 @@
 import json
 
+import httpx
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from scraping.discovery import bounded_discovery
 from scraping.source_catalog import SOURCE_SEEDS
 from sources.fetcher import capture_url
 from sources.models import Source
@@ -13,21 +15,29 @@ class DryRunRollback(Exception):
 
 
 class Command(BaseCommand):
-    help = "Probe multiple curated Iranian healthcare sources through CDI Safe Fetch."
+    help = "Run bounded same-domain discovery across curated healthcare sources."
 
     def add_arguments(self, parser):
         parser.add_argument("--source", action="append", dest="sources")
         parser.add_argument("--persist", action="store_true")
+        parser.add_argument("--max-pages", type=int, default=3)
+        parser.add_argument("--max-urls", type=int, default=25)
 
     def handle(self, *args, **options):
         selected = options.get("sources")
+        if options["max_pages"] < 1 or options["max_pages"] > 100:
+            raise CommandError("--max-pages must be between 1 and 100")
+        if options["max_urls"] < 1 or options["max_urls"] > 500:
+            raise CommandError("--max-urls must be between 1 and 500")
+
+        selected_keys = set(selected or [])
         seeds = [
             item for item in SOURCE_SEEDS
-            if not selected or item["key"] in set(selected)
+            if not selected or item["key"] in selected_keys
         ]
-        if selected and len(seeds) != len(set(selected)):
+        if selected and len(seeds) != len(selected_keys):
             known = {item["key"] for item in SOURCE_SEEDS}
-            unknown = sorted(set(selected) - known)
+            unknown = sorted(selected_keys - known)
             raise CommandError(f"unknown source(s): {', '.join(unknown)}")
 
         def run_once():
@@ -59,22 +69,46 @@ class Command(BaseCommand):
                     "max_response_bytes",
                 ])
 
-                source_results = []
-                for url in item["seeds"]:
-                    capture = capture_url(source, url)
-                    source_results.append({
+                with httpx.Client(
+                    timeout=httpx.Timeout(20.0, connect=10.0),
+                    follow_redirects=False,
+                    trust_env=False,
+                    headers={"User-Agent": source.user_agent},
+                ) as client:
+                    def fetch_page(url):
+                        try:
+                            return capture_url(source, url, client=client)
+                        except TypeError as exc:
+                            if "unexpected keyword argument 'client'" not in str(exc):
+                                raise
+                            return capture_url(source, url)
+
+                    pages = bounded_discovery(
+                        source,
+                        item["seeds"],
+                        fetch_page,
+                        max_pages=options["max_pages"],
+                        max_urls=options["max_urls"],
+                        is_success=lambda capture: capture.status == capture.Status.SUCCESS,
+                    )
+
+                captures = [
+                    {
                         "url": url,
                         "status": capture.status,
                         "status_code": capture.status_code,
                         "bytes": len(capture.body.encode("utf-8")),
                         "error": capture.error_message,
-                    })
+                    }
+                    for url, capture in pages
+                ]
                 results.append({
                     "source": item["key"],
                     "domain": item["domain"],
                     "capabilities": item["capabilities"],
                     "adapter": item["adapter"],
-                    "captures": source_results,
+                    "pages_discovered_and_fetched": len(pages),
+                    "captures": captures,
                 })
             return results
 
@@ -100,8 +134,12 @@ class Command(BaseCommand):
         )
         result = {
             "sources_checked": len(results),
-            "seed_urls_checked": sum(len(item["captures"]) for item in results),
+            "pages_checked": sum(
+                len(item["captures"]) for item in results
+            ),
             "successful_captures": successful,
+            "max_pages_per_source": options["max_pages"],
+            "max_urls_per_source": options["max_urls"],
             "persisted": options["persist"],
             "rolled_back": rolled_back,
             "sources": results,
