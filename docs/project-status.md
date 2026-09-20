@@ -165,3 +165,12 @@ The migration remains pre-merge and therefore safe to correct in place. New head
 - دو تست regression برای materialization و idempotency اضافه شد: `backend/datahub/test_pharmacy_pipeline.py`.
 - commitهای جدید بعد از CI سبز هستند؛ بنابراین این دو commit هنوز باید یک بار از CI عبور کنند. تا قبل از نتیجه جدید، سبز بودن آن‌ها ادعا نمی‌شود.
 - این مرحله هنوز crawl واقعی pharmacy نیست. قدم بعدی: adapter/selector محدود Pillix برای استخراج رکوردهای واقعی داروخانه، سپس اجرای crawl یک صفحه/حداکثر چند صفحه در isolated staging و بررسی Location dedup + Pharmacy upsert.
+
+
+## 2026-09-20 — Pillix pharmacy adapter
+
+- CI چهارگانه برای commit `2ffed6091078d462ad269ebbf7ce0623d7b7e674` سبز شد.
+- parser مستقل `backend/scraping/adapters/pillix_pharmacy.py` اضافه شد. parser بر اساس داده‌های صریح کارت داروخانه (`h2`, استان، شهرستان، آدرس و نوع فعالیت) کار می‌کند و availability را استنتاج نمی‌کند.
+- parser pure و قابل تست است و duplicate cardهای یکسان را حذف می‌کند.
+- تست‌های adapter در `backend/scraping/adapters/test_pillix_pharmacy.py` اضافه شدند.
+- این مرحله هنوز crawl شبکه‌ای یا persistence را فعال نمی‌کند؛ بنابراین ریسک production ندارد. قدم بعدی اتصال adapter به pipeline اجرای scraper و اجرای bounded crawl واقعی در staging است.
