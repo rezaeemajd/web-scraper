@@ -104,7 +104,7 @@ SOURCE_SEEDS = [
         "key": "pharmaweb",
         "name": "PharmaWeb",
         "domain": "medpharmaweb.com",
-        "base_url": "https://medpharmaweb.com",
+        "base_url": "https://www.medpharmaweb.com",
         "seeds": [
             "https://www.medpharmaweb.com/item/gardasil_groups_gardasil_gardasil9/",
             "https://www.medpharmaweb.com/item/gardasil_groups_gardasil_gardasil9s/",
