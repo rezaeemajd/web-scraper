@@ -470,3 +470,59 @@ def test_process_records_preserves_repeat_observations_without_mutating_canonica
     observations = RecordObservation.objects.filter(record=first).order_by("id")
     assert observations.count() == 2
     assert observations.last().normalized_payload["price"] == "100"
+
+
+@pytest.mark.django_db
+def test_identifier_identity_survives_mutable_field_changes():
+    from .models import RawCapture, RecordObservation
+
+    entity = EntityType.objects.create(name="داروی هویتی", slug="drug-identity")
+    EntityField.objects.create(
+        entity_type=entity, name="کد ملی دارو", slug="code", is_identifier=True
+    )
+    EntityField.objects.create(
+        entity_type=entity, name="قیمت", slug="price"
+    )
+    capture1 = RawCapture.objects.create(url="https://example.com/1", body="old")
+    capture2 = RawCapture.objects.create(url="https://example.com/1", body="new")
+
+    first = process_record(
+        entity_type=entity,
+        url="https://example.com/1",
+        payload={"code": "ABC-1", "price": "100"},
+        raw_capture=capture1,
+    )
+    second = process_record(
+        entity_type=entity,
+        url="https://example.com/1",
+        payload={"code": "ABC-1", "price": "120"},
+        raw_capture=capture2,
+    )
+
+    assert first.pk == second.pk
+    first.refresh_from_db()
+    assert first.canonical_key.startswith("idv1:")
+    assert first.normalized_payload["price"] == "100"
+    assert RecordObservation.objects.filter(record=first).count() == 2
+
+
+@pytest.mark.django_db
+def test_identifier_fields_create_distinct_canonical_entities():
+    entity = EntityType.objects.create(name="واکسن هویتی", slug="vaccine-identity")
+    EntityField.objects.create(
+        entity_type=entity, name="شناسه", slug="identifier", is_identifier=True
+    )
+
+    first = process_record(
+        entity_type=entity,
+        url="https://example.com/a",
+        payload={"identifier": "V-1", "name": "A"},
+    )
+    second = process_record(
+        entity_type=entity,
+        url="https://example.com/b",
+        payload={"identifier": "V-2", "name": "A"},
+    )
+
+    assert first.pk != second.pk
+    assert ExtractedRecord.objects.filter(entity_type=entity).count() == 2
