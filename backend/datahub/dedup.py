@@ -46,7 +46,7 @@ def _candidate_queryset(record):
         for key in (slug, name):
             value = payload.get(key)
             if value not in (None, ""):
-                blocks.append(Q(**{f"normalized_payload__{key}": value}))
+                blocks.append(Q(normalized_payload__contains={key: value}))
                 break
 
     if blocks:
