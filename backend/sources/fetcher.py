@@ -16,6 +16,10 @@ class FetchBlocked(Exception):
     pass
 
 
+class FetchTransient(Exception):
+    pass
+
+
 _MAX_REDIRECTS = 5
 _ROBOTS_CACHE_TTL = 10 * 60
 
@@ -220,6 +224,12 @@ def capture_url(source: Source, url: str, *, client=None) -> RawCapture:
             url=url,
             status=RawCapture.Status.BLOCKED,
             error_message=str(exc)[:2000],
+        )
+    except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        return RawCapture.objects.create(
+            url=url,
+            status=RawCapture.Status.ERROR,
+            error_message=f"transient:{type(exc).__name__}:{str(exc)[:1900]}",
         )
     except Exception as exc:
         return RawCapture.objects.create(
