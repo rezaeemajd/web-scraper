@@ -89,6 +89,30 @@ SOURCE_SEEDS = [
         "adapter": "generic",
     },
     {
+        "key": "iran_supp",
+        "name": "Iran Supplement",
+        "domain": "iran-supp.com",
+        "base_url": "https://iran-supp.com",
+        "seeds": [
+            "https://iran-supp.com/product/gardasil-9-turkey/",
+            "https://iran-supp.com/product/usa-gardasil-9/",
+        ],
+        "capabilities": ["retail_product", "retail_price", "health_product"],
+        "adapter": "generic",
+    },
+    {
+        "key": "pharmaweb",
+        "name": "PharmaWeb",
+        "domain": "medpharmaweb.com",
+        "base_url": "https://medpharmaweb.com",
+        "seeds": [
+            "https://www.medpharmaweb.com/item/gardasil_groups_gardasil_gardasil9/",
+            "https://www.medpharmaweb.com/item/gardasil_groups_gardasil_gardasil9s/",
+        ],
+        "capabilities": ["retail_product", "retail_price", "health_product", "pharmacy"],
+        "adapter": "generic",
+    },
+    {
         "key": "darukade",
         "name": "Darukade",
         "domain": "darukade.com",
