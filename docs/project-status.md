@@ -30,7 +30,7 @@
 - Foundation: cdi-v1-foundation @ c072da00dfce2d3c5c27b11c499a73c45343c95b
 - P1: cdi-v1-p1-core-data-engine
 - PR #1: feat: CDI P1 core data engine — OPEN / DRAFT / NOT MERGED
-- آخرین commit branch: `5f8d91b309e46ad51313b3091d92dbd7300f7d91`
+- آخرین commit branch: `21103f00441ff6c4edaef49b794dcf65b5e5f714` (Pharmacy materialization + tests)
 - force-push/reset/delete نسخه‌ها ممنوع.
 
 ## CI و اصلاحات اخیر
@@ -148,10 +148,20 @@ Fixed without adding another migration: `models.py` and the still-unmerged `0010
 The migration remains pre-merge and therefore safe to correct in place. New head: `c38a638`.
 
 
-## 2026-09-20 — CI green و گام بعدی
+## 2026-09-20 — CI سبز + Pharmacy materialization
 
 - Head `5f8d91b309e46ad51313b3091d92dbd7300f7d91` اکنون چهار workflow را با موفقیت گذرانده است: Backend CI، Backend Docker CI، Frontend Docker CI و Compose Integration CI.
 - نتیجه: root cause مربوط به نام indexهای migration بسته شد و regression مربوط به structured extraction نیز در مسیر CI تأیید شد.
 - اقدام بعدی دیگر CI نیست: اجرای واقعی benchmark دو صفحه Gardasil روی isolated CDI stack و سپس بررسی idempotency، fingerprint/identity و dedup candidate است.
 - دسترسی اجرای زنده به سرور در این جلسه در دسترس نیست؛ بنابراین هیچ اجرای live یا نتیجه دیتابیسی ادعا نمی‌شود. پس از فراهم شدن اجرای isolated، همان benchmark واقعی بدون fixture ساختگی اجرا خواهد شد.
 - Pharmacy/MarketObservation پیاده‌سازی شده ولی هنوز market-accepted نیست؛ پذیرش آن منوط به داده واقعی pharmacy و evidence محصول-داروخانه است.
+
+
+## 2026-09-20 — Pharmacy materialization hardening
+
+- Head `b70c113351272f1a3c7612a78ae0a1f5ac73d5cc` اکنون چهار workflow را سبز گذرانده است: Backend CI، Backend Docker CI، Frontend Docker CI و Compose Integration CI.
+- پس از بسته‌شدن gateهای CI، یک لایه کوچک و غیرتهاجمی برای تبدیل `ExtractedRecord` داروخانه به `Pharmacy + Location` اضافه شد: `backend/datahub/pharmacy_pipeline.py`.
+- سرویس `upsert_pharmacy_from_record()` بر اساس `source_domain + source_url` upsert می‌کند، Location را از province/city/district/address می‌سازد، evidence/provenance را نگه می‌دارد و هیچ `MarketObservation` یا موجودی محصولی را از صرفاً وجود داروخانه استنتاج نمی‌کند.
+- دو تست regression برای materialization و idempotency اضافه شد: `backend/datahub/test_pharmacy_pipeline.py`.
+- commitهای جدید بعد از CI سبز هستند؛ بنابراین این دو commit هنوز باید یک بار از CI عبور کنند. تا قبل از نتیجه جدید، سبز بودن آن‌ها ادعا نمی‌شود.
+- این مرحله هنوز crawl واقعی pharmacy نیست. قدم بعدی: adapter/selector محدود Pillix برای استخراج رکوردهای واقعی داروخانه، سپس اجرای crawl یک صفحه/حداکثر چند صفحه در isolated staging و بررسی Location dedup + Pharmacy upsert.
