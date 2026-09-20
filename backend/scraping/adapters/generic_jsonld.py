@@ -64,7 +64,7 @@ def extract_jsonld_products(html, source_url):
         for item in candidates:
             if not isinstance(item, dict):
                 continue
-            if "Product" not in _product_types(item.get("@type")):
+            if "product" not in _product_types(item.get("@type")):
                 continue
 
             name = str(item.get("name") or "").strip()
