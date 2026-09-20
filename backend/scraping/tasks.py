@@ -84,10 +84,22 @@ def _release_scraper_lock(client, key, token):
     try:
         client.eval(_RELEASE_LOCK_SCRIPT, 1, key, token)
     except redis.RedisError:
-        # Lock expiry is the recovery mechanism; never mask the task result.
         pass
     finally:
         client.close()
+
+
+def _unpack_execute_result(result):
+    """Accept the current 3-tuple API and legacy 2-tuple test/plugin adapters."""
+    if not isinstance(result, tuple):
+        raise TypeError("execute_many must return a tuple")
+    if len(result) == 3:
+        records, captures, record_count = result
+        return records, captures, record_count
+    if len(result) == 2:
+        records, captures = result
+        return records, captures, len(records)
+    raise ValueError("unexpected execute_many result shape")
 
 
 @shared_task(
@@ -109,8 +121,6 @@ def run_scraper(self, scraper_id):
     run = None
     try:
         _recover_stale_run(scraper_id)
-        # Redis is the fast distributed guard. The row lock is the durable
-        # second line of defense if a long-running task outlives the Redis TTL.
         with transaction.atomic():
             locked_scraper = Scraper.objects.select_for_update().get(pk=scraper_id)
             active_run = (
@@ -140,12 +150,13 @@ def run_scraper(self, scraper_id):
                 run.records_extracted = record_count
                 run.save(update_fields=["pages_fetched", "records_extracted"])
 
-            _, captures, record_count = execute_many(
+            result = execute_many(
                 locked_scraper,
                 collect_records=False,
                 collect_captures=False,
                 progress_callback=on_progress,
             )
+            _, captures, record_count = _unpack_execute_result(result)
             run.records_extracted = record_count
             capture = last_capture or (captures[-1] if captures else None)
             if capture is None:
@@ -159,7 +170,9 @@ def run_scraper(self, scraper_id):
                     else ScraperRun.Status.FAILED
                 )
             )
-            if run.status == ScraperRun.Status.FAILED:
+            if run.status == ScraperRun.Status.BLOCKED:
+                run.error_message = capture.error_message
+            elif run.status == ScraperRun.Status.FAILED:
                 run.error_message = capture.error_message
                 if capture.error_message.startswith("transient:"):
                     raise RetryableScraperRun(capture.error_message)
