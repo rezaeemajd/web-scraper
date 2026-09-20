@@ -165,10 +165,9 @@ class Command(BaseCommand):
             captures = []
             count = 0
             for target_url in [url, variant_url]:
-                scraper.start_url = target_url
-                scraper.save(update_fields=["start_url"])
                 result = execute_many(
                     scraper,
+                    start_url=target_url,
                     collect_records=True,
                     collect_captures=True,
                 )
