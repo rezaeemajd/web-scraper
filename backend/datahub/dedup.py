@@ -7,27 +7,21 @@ from .models import DedupCandidate, EntityField, ExtractedRecord
 
 _MIN_SIMILARITY = Decimal("0.7000")
 _MAX_CANDIDATE_SCAN = 1000
+_MAX_FALLBACK_BLOCK_FIELDS = 8
 
 
 def similarity(a, b):
-    """Return Jaccard-like field similarity over the union of populated keys.
-
-    Empty values are excluded from the denominator. This keeps the score
-    symmetric and penalizes records that contain additional conflicting fields,
-    while still ignoring fields that neither side actually populated.
-    """
+    """Return symmetric field similarity over the union of populated keys."""
     keys = set(a) | set(b)
     comparable = [
-        key
-        for key in keys
+        key for key in keys
         if a.get(key) not in (None, "") or b.get(key) not in (None, "")
     ]
     if not comparable:
         return Decimal("0.0000"), []
 
     matches = [
-        key
-        for key in comparable
+        key for key in comparable
         if a.get(key) not in (None, "")
         and b.get(key) not in (None, "")
         and a.get(key) == b.get(key)
@@ -36,7 +30,12 @@ def similarity(a, b):
 
 
 def _blocking_fields(record):
-    """Return configured searchable keys and non-empty values once."""
+    """Return configured blocking fields, with a bounded payload fallback.
+
+    Production entities should explicitly mark blocking fields. For simple or
+    legacy entities without field metadata, populated payload keys are used as
+    a bounded fallback so dedup does not silently produce zero candidates.
+    """
     payload = record.normalized_payload or {}
     fields = list(
         EntityField.objects.filter(
@@ -51,6 +50,7 @@ def _blocking_fields(record):
                 searchable=True,
             ).values_list("slug", "name")
         )
+
     blocks = []
     for slug, name in fields:
         for key in (slug, name):
@@ -58,6 +58,12 @@ def _blocking_fields(record):
             if value not in (None, ""):
                 blocks.append((key, value))
                 break
+
+    if not blocks:
+        for key in sorted(payload)[:_MAX_FALLBACK_BLOCK_FIELDS]:
+            value = payload.get(key)
+            if value not in (None, ""):
+                blocks.append((key, value))
     return blocks
 
 
@@ -70,7 +76,6 @@ def _candidate_queryset(record, blocks=None):
         .only("id", "entity_type_id", "fingerprint", "status", "normalized_payload")
         .order_by("pk")
     )
-
     if record.fingerprint:
         base = base.exclude(fingerprint=record.fingerprint)
 
@@ -85,10 +90,7 @@ def _candidate_queryset(record, blocks=None):
         condition |= match
         score_terms.append(
             Case(
-                When(
-                    normalized_payload__contains={key: value},
-                    then=Value(1),
-                ),
+                When(normalized_payload__contains={key: value}, then=Value(1)),
                 default=Value(0),
                 output_field=IntegerField(),
             )
@@ -109,15 +111,9 @@ def find_candidates(record, limit=20):
     if limit <= 0:
         return []
 
-    blocks = _blocking_fields(record)
-    queryset = _candidate_queryset(record, blocks=blocks)
-
     matches = []
-    for other in queryset.iterator():
-        score, fields = similarity(
-            record.normalized_payload,
-            other.normalized_payload,
-        )
+    for other in _candidate_queryset(record, blocks=_blocking_fields(record)).iterator():
+        score, fields = similarity(record.normalized_payload, other.normalized_payload)
         if score >= _MIN_SIMILARITY:
             left, right = sorted((record, other), key=lambda item: item.pk)
             matches.append((left.pk, right.pk, score, fields))
@@ -136,9 +132,7 @@ def find_candidates(record, limit=20):
         )
     }
 
-    to_create = []
-    to_update = []
-    result = []
+    to_create, to_update, result = [], [], []
     for left_id, right_id, score, fields in matches:
         key = (left_id, right_id)
         candidate = existing.get(key)
@@ -158,9 +152,7 @@ def find_candidates(record, limit=20):
 
     if to_create:
         DedupCandidate.objects.bulk_create(
-            to_create,
-            batch_size=min(100, len(to_create)),
-            ignore_conflicts=True,
+            to_create, batch_size=min(100, len(to_create)), ignore_conflicts=True
         )
         existing.update({
             (candidate.record_a_id, candidate.record_b_id): candidate
@@ -173,9 +165,7 @@ def find_candidates(record, limit=20):
 
     if to_update:
         DedupCandidate.objects.bulk_update(
-            to_update,
-            ["similarity", "matched_fields"],
-            batch_size=min(100, len(to_update)),
+            to_update, ["similarity", "matched_fields"],
+            batch_size=min(100, len(to_update))
         )
-
     return result[:limit]
