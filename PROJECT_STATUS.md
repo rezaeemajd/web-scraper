@@ -235,3 +235,17 @@ Adapter output دیگر فقط برای شمارش extraction استفاده ن�
 2. سپس benchmark واقعی Gardasil چندمنبعی را روی محیط isolated اجرا می‌کنیم.
 3. قیمت/موجودی را observation نگه می‌داریم و مقدار مبهم `0` را قیمت واقعی فرض نمی‌کنیم.
 4. پس از acceptance، Pharmacy/MarketObservation و crawl محدود تهران را به pipeline متصل می‌کنیم.
+
+
+## 2026-09-20 — 13:06 +03:30 — Multi-source Gardasil benchmark sources registered
+
+- منابع واقعی مستقل برای benchmark اضافه شدند:
+  - Pillix — اطلاعات دارویی/رگولاتوری عمومی
+  - Iran Supplement — صفحات تجاری Gardasil 9 با قیمت
+  - PharmaWeb — صفحات تجاری Gardasil 9 با قیمت، موجودی و شناسه محصول
+- این صفحات فقط seed هستند؛ acceptance زمانی معتبر است که Fetch واقعی + Adapter + persistence روی چند domain مستقل اجرا و نتیجه مشاهده شود.
+- Iran Supplement و PharmaWeb فعلاً با adapter عمومی JSON-LD ثبت شده‌اند؛ اگر HTML/semantic evidence واقعی نشان دهد که کافی نیست، adapter اختصاصی همان source اضافه می‌شود.
+- اطلاعات تجاری به‌عنوان observation بازار ثبت می‌شود و جایگزین حقیقت رگولاتوری نیست.
+- قیمت Pillix که `0` نمایش داده می‌شود به‌صورت قیمت واقعی parse/interpret نمی‌شود.
+- آخرین head فعلی: `1c514886997fb38692eb3f011710a160e0c4df52`
+- CI برای این head هنوز نتیجه‌ای گزارش نکرده است.
