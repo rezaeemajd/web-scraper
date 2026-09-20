@@ -109,15 +109,23 @@ def run_scraper(self, scraper_id):
                 started_at=timezone.now(),
             )
         try:
-            _, captures, record_count = execute_many(
+            last_capture = None
+
+            def on_progress(capture, pages_fetched, record_count):
+                nonlocal last_capture
+                last_capture = capture
+                run.pages_fetched = pages_fetched
+                run.records_extracted = record_count
+                run.save(update_fields=["pages_fetched", "records_extracted"])
+
+            _, _, record_count = execute_many(
                 locked_scraper,
                 collect_records=False,
-            )
-            run.pages_fetched = sum(
-                1 for item in captures if item.status == item.Status.SUCCESS
+                collect_captures=False,
+                progress_callback=on_progress,
             )
             run.records_extracted = record_count
-            capture = captures[-1] if captures else None
+            capture = last_capture
             if capture is None:
                 raise RuntimeError("scraper produced no capture")
             run.status = (
