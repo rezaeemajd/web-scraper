@@ -104,15 +104,19 @@ def test_run_scraper_records_success(monkeypatch):
     monkeypatch.setattr(
         "scraping.tasks.execute_many",
         lambda scraper, **kwargs: (
-            __import__("datahub.models", fromlist=["ExtractedRecord"]).ExtractedRecord.objects.create(
-                entity_type=entity,
-                source_url=scraper.start_url,
-                source_domain=source.domain,
-                payload={"name": "دکتر الف"},
-                normalized_payload={"name": "دکتر الف"},
-                raw_capture=capture,
-                fingerprint="a" * 64,
-            )], [capture]),
+            [
+                __import__("datahub.models", fromlist=["ExtractedRecord"]).ExtractedRecord.objects.create(
+                    entity_type=entity,
+                    source_url=scraper.start_url,
+                    source_domain=source.domain,
+                    payload={"name": "دکتر الف"},
+                    normalized_payload={"name": "دکتر الف"},
+                    raw_capture=capture,
+                    fingerprint="a" * 64,
+                )
+            ],
+            [capture],
+        ),
     )
 
     result = run_scraper.run(scraper.pk)
@@ -241,9 +245,7 @@ def test_run_scraper_records_blocked_capture_as_blocked(monkeypatch):
     )
     monkeypatch.setattr(
         "scraping.tasks.execute_many",
-        lambda scraper, **kwargs: ([], [capture], 0)
-        if not collect_records
-        else ([], [capture]),
+        lambda scraper, **kwargs: ([], [capture], 0),
     )
 
     result = run_scraper.run(scraper.pk)
@@ -514,6 +516,7 @@ def test_execute_many_can_skip_record_object_retention(monkeypatch):
     assert ExtractedRecord.objects.filter(entity_type=entity).count() == 2
 
 
+@pytest.mark.django_db
 def test_run_scraper_retries_transient_http_status(monkeypatch):
     from datahub.models import RawCapture
     from scraping.tasks import RetryableScraperRun, run_scraper
