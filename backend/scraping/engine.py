@@ -157,6 +157,7 @@ def execute_many(scraper: Scraper):
     visited = set()
     records = []
     captures = []
+    entity_fields = list(scraper.entity_type.fields.all())
 
     with httpx.Client(
         timeout=httpx.Timeout(20.0, connect=10.0),
