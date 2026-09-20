@@ -11,7 +11,7 @@ from .models import ExportJob
 HEADERS = [
     "id", "entity_type", "location_id", "source_domain", "source_url",
     "status", "quality_score", "confidence", "canonical_key", "fingerprint",
-    "payload", "normalized_payload", "evidence", "created_at",
+    "payload", "normalized_payload", "evidence", "collected_at",
 ]
 
 MIME_TYPES = {
@@ -40,10 +40,15 @@ def _queryset(filters):
         qs = qs.filter(status=filters["status"])
     if filters.get("quality_min") not in (None, ""):
         qs = qs.filter(quality_score__gte=filters["quality_min"])
+    if filters.get("collected_after"):
+        qs = qs.filter(collected_at__gte=filters["collected_after"])
+    if filters.get("collected_before"):
+        qs = qs.filter(collected_at__lte=filters["collected_before"])
+    # Backward-compatible aliases for callers that used the pre-P1 names.
     if filters.get("created_after"):
-        qs = qs.filter(created_at__gte=filters["created_after"])
+        qs = qs.filter(collected_at__gte=filters["created_after"])
     if filters.get("created_before"):
-        qs = qs.filter(created_at__lte=filters["created_before"])
+        qs = qs.filter(collected_at__lte=filters["created_before"])
     return qs
 
 
@@ -62,7 +67,7 @@ def _row(record):
         json.dumps(record.payload, ensure_ascii=False, sort_keys=True),
         json.dumps(record.normalized_payload, ensure_ascii=False, sort_keys=True),
         json.dumps(record.evidence, ensure_ascii=False, sort_keys=True),
-        record.created_at.isoformat(),
+        record.collected_at.isoformat(),
     ]
 
 
@@ -158,7 +163,6 @@ def _write_pdf(path, filters):
 
     for row in _iter_rows(filters):
         text = " | ".join(f"{key}={value}" for key, value in zip(HEADERS, row))
-        # Keep long JSON fields usable without making a single unbreakable line.
         for start in range(0, len(text), 115):
             pdf.drawString(24, y, text[start:start + 115])
             y -= 10
