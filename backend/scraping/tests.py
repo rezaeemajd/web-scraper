@@ -241,7 +241,9 @@ def test_run_scraper_records_blocked_capture_as_blocked(monkeypatch):
     )
     monkeypatch.setattr(
         "scraping.tasks.execute_many",
-        lambda scraper: ([], [capture]),
+        lambda scraper, *, collect_records=True: ([], [capture], 0)
+        if not collect_records
+        else ([], [capture]),
     )
 
     result = run_scraper.run(scraper.pk)
@@ -470,6 +472,49 @@ def test_execute_many_batches_duplicate_records_before_persisting(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.django_db
+def test_execute_many_can_skip_record_object_retention(monkeypatch):
+    from datahub.models import ExtractedRecord, RawCapture
+
+    source = Source.objects.create(
+        name="Low Memory Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="کم‌حافظه", slug="low-memory")
+    scraper = Scraper.objects.create(
+        name="Low memory scraper",
+        source=source,
+        start_url="https://example.com/items",
+        entity_type=entity,
+        extraction_config={
+            "record_selector": ".item",
+            "fields": {"name": ".name"},
+        },
+    )
+    capture = RawCapture(
+        url=scraper.start_url,
+        status_code=200,
+        body=(
+            '<div class="item"><span class="name">A</span></div>'
+            '<div class="item"><span class="name">B</span></div>'
+        ),
+        status=RawCapture.Status.SUCCESS,
+    )
+    monkeypatch.setattr(
+        "scraping.engine.capture_url",
+        lambda source, url, *, client=None: capture,
+    )
+
+    records, captures, count = execute_many(scraper, collect_records=False)
+
+    assert records == []
+    assert len(captures) == 1
+    assert count == 2
+    assert ExtractedRecord.objects.filter(entity_type=entity).count() == 2
+
+
 def test_run_scraper_retries_transient_http_status(monkeypatch):
     from datahub.models import RawCapture
     from scraping.tasks import RetryableScraperRun, run_scraper
