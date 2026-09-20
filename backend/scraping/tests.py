@@ -550,3 +550,58 @@ def test_run_scraper_retries_transient_http_status(monkeypatch):
     run = ScraperRun.objects.get(scraper=scraper)
     assert run.status == ScraperRun.Status.FAILED
     assert run.error_message == "transient:http_status:503"
+
+
+@pytest.mark.django_db
+def test_execute_many_can_stream_without_retaining_captures(monkeypatch):
+    from datahub.models import RawCapture
+
+    source = Source.objects.create(
+        name="Streaming Capture Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="استریم", slug="streaming-captures")
+    scraper = Scraper.objects.create(
+        name="Streaming capture scraper",
+        source=source,
+        start_url="https://example.com/page/1",
+        entity_type=entity,
+        extraction_config={
+            "fields": {"name": ".name"},
+            "pagination": {"next_selector": "a.next", "max_pages": 2},
+        },
+    )
+    pages = {
+        "https://example.com/page/1": '<div class="name">A</div><a class="next" href="/page/2">next</a>',
+        "https://example.com/page/2": '<div class="name">B</div>',
+    }
+
+    def fake_capture(source, url, *, client=None):
+        return RawCapture(
+            url=url,
+            status_code=200,
+            body=pages[url],
+            status=RawCapture.Status.SUCCESS,
+        )
+
+    progress = []
+    monkeypatch.setattr("scraping.engine.capture_url", fake_capture)
+
+    records, captures, count = execute_many(
+        scraper,
+        collect_records=False,
+        collect_captures=False,
+        progress_callback=lambda capture, pages_fetched, record_count: progress.append(
+            (capture.url, pages_fetched, record_count)
+        ),
+    )
+
+    assert records == []
+    assert captures == []
+    assert count == 2
+    assert progress == [
+        ("https://example.com/page/1", 1, 1),
+        ("https://example.com/page/2", 2, 2),
+    ]
