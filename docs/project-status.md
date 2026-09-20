@@ -30,12 +30,12 @@
 - Foundation: cdi-v1-foundation @ c072da00dfce2d3c5c27b11c499a73c45343c95b
 - P1: cdi-v1-p1-core-data-engine
 - PR #1: feat: CDI P1 core data engine — OPEN / DRAFT / NOT MERGED
-- آخرین commit branch: 6c9013e41c52c5283b0a66953e7603c48f7df344
+- آخرین commit branch: `5f8d91b309e46ad51313b3091d92dbd7300f7d91`
 - force-push/reset/delete نسخه‌ها ممنوع.
 
 ## CI و اصلاحات اخیر
 
-آخرین run کامل قبل از hardening: Backend Docker SUCCESS، Frontend Docker SUCCESS، Compose Integration SUCCESS، Backend CI FAILURE با 16 failure / 52 pass.
+آخرین CI تأییدشده روی head `5f8d91b309e46ad51313b3091d92dbd7300f7d91`: Backend Docker SUCCESS، Frontend Docker SUCCESS، Backend CI SUCCESS، Compose Integration SUCCESS. چهار workflow سبز هستند.
 
 ریشه خطاها:
 1. fake HTTP client تست متد close نداشت.
@@ -49,7 +49,7 @@
 - lifecycle کامل fake HTTP client
 - مقایسه Decimal با Decimal
 
-**آخرین CI قبل از این اصلاح روی head fd90afc722f345f97458ac9e10825ace60cfc586، 68 pass و 1 failure داشت. failure فقط از assertion قدیمی تست redirect خصوصی بود: پیاده‌سازی عمداً redirect خارج از دامنه را قبل از DNS/public-IP بررسی می‌کند تا SSRF با redirect cross-domain مسدود شود. تست با این قرارداد امنیتی هم‌راستا شد. commit اصلاحی 09c846376e6dcc5fd0a1b84650b200ae20faf0c0 است و CI جدید برای آن در حال اجراست؛ PASS نهایی هنوز ادعا نمی‌شود.**
+**CI فعلی سبز است.** چهار workflow مربوط به head `5f8d91b` با موفقیت کامل شده‌اند؛ بنابراین gate مربوط به migration/index naming و regressionهای اخیر بسته شده است.
 
 ## اصلاحات آخر این مرحله
 
@@ -65,7 +65,7 @@ Run 35496176579 روی head قبلی: migration و makemigrations سالم بو�
 
 ## تصمیم مهندسی برای سرعت پروژه
 
-تا زمانی که CI روی head اصلاحی تأیید نشده و benchmark واقعی روی isolated stack اجرا نشده، مدل‌های Pharmacy/MarketObservation را عمداً وارد branch نمی‌کنیم؛ این کار از ساخت migration و API روی فرضیات ناقص جلوگیری می‌کند. بعد از green شدن CI، مرحله بعدی مستقیماً Pharmacy + Location + MarketObservation و سپس crawl محدود واقعی تهران/گارداسیل است؛ بدون تغییر Foundation یا Production.
+CI اکنون سبز است؛ بنابراین Pharmacy/MarketObservation روی همین PR branch قابل ادامه است. اما پذیرش این فاز هنوز به اجرای benchmark واقعی روی isolated stack و crawl محدود واقعی وابسته است؛ Foundation و Production همچنان دست‌نخورده می‌مانند.
 
 ## Benchmark واقعی بازار ایران
 
@@ -146,3 +146,12 @@ Fixed without adding another migration: `models.py` and the still-unmerged `0010
 - `mktobs_avail_time_idx`
 
 The migration remains pre-merge and therefore safe to correct in place. New head: `c38a638`.
+
+
+## 2026-09-20 — CI green و گام بعدی
+
+- Head `5f8d91b309e46ad51313b3091d92dbd7300f7d91` اکنون چهار workflow را با موفقیت گذرانده است: Backend CI، Backend Docker CI، Frontend Docker CI و Compose Integration CI.
+- نتیجه: root cause مربوط به نام indexهای migration بسته شد و regression مربوط به structured extraction نیز در مسیر CI تأیید شد.
+- اقدام بعدی دیگر CI نیست: اجرای واقعی benchmark دو صفحه Gardasil روی isolated CDI stack و سپس بررسی idempotency، fingerprint/identity و dedup candidate است.
+- دسترسی اجرای زنده به سرور در این جلسه در دسترس نیست؛ بنابراین هیچ اجرای live یا نتیجه دیتابیسی ادعا نمی‌شود. پس از فراهم شدن اجرای isolated، همان benchmark واقعی بدون fixture ساختگی اجرا خواهد شد.
+- Pharmacy/MarketObservation پیاده‌سازی شده ولی هنوز market-accepted نیست؛ پذیرش آن منوط به داده واقعی pharmacy و evidence محصول-داروخانه است.
