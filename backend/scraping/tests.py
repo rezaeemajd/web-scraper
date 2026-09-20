@@ -103,7 +103,7 @@ def test_run_scraper_records_success(monkeypatch):
     )
     monkeypatch.setattr(
         "scraping.tasks.execute_many",
-        lambda scraper: (
+        lambda scraper, **kwargs: (
             __import__("datahub.models", fromlist=["ExtractedRecord"]).ExtractedRecord.objects.create(
                 entity_type=entity,
                 source_url=scraper.start_url,
@@ -241,7 +241,7 @@ def test_run_scraper_records_blocked_capture_as_blocked(monkeypatch):
     )
     monkeypatch.setattr(
         "scraping.tasks.execute_many",
-        lambda scraper, *, collect_records=True: ([], [capture], 0)
+        lambda scraper, **kwargs: ([], [capture], 0)
         if not collect_records
         else ([], [capture]),
     )
@@ -541,7 +541,7 @@ def test_run_scraper_retries_transient_http_status(monkeypatch):
     )
     monkeypatch.setattr(
         "scraping.tasks.execute_many",
-        lambda scraper: ([], [capture]),
+        lambda scraper, **kwargs: ([], [capture]),
     )
 
     with pytest.raises(RetryableScraperRun, match="transient:http_status:503"):
