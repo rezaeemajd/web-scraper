@@ -5,7 +5,7 @@ from django.db.models import Case, IntegerField, Q, Value, When
 from .models import DedupCandidate, EntityField, ExtractedRecord
 
 
-_MIN_SIMILARITY = Decimal("0.7000")
+_MIN_SIMILARITY = Decimal("0.6500")
 _MAX_CANDIDATE_SCAN = 1000
 _MAX_FALLBACK_BLOCK_FIELDS = 8
 
