@@ -389,3 +389,45 @@ def test_record_list_omits_large_json_and_detail_keeps_it():
     assert detail.status_code == 200
     assert detail.data["payload"]["html"] == "x" * 5000
     assert detail.data["normalized_payload"]["name"] == "A"
+
+
+@pytest.mark.django_db
+def test_dedup_persists_multiple_candidates_in_bulk_and_refreshes_them():
+    from .models import DedupCandidate
+
+    entity = EntityType.objects.create(name="پزشک چندتایی", slug="doctor-bulk-dedup")
+    EntityField.objects.create(entity_type=entity, name="نام", slug="name", searchable=True)
+    target = ExtractedRecord.objects.create(
+        entity_type=entity,
+        source_url="https://example.com/target",
+        source_domain="example.com",
+        normalized_payload={"name": "A", "city": "X"},
+        fingerprint="a" * 64,
+    )
+    others = []
+    for index in range(3):
+        others.append(
+            ExtractedRecord.objects.create(
+                entity_type=entity,
+                source_url=f"https://example.com/{index}",
+                source_domain="example.com",
+                normalized_payload={"name": "A", "city": "X", "extra": str(index)},
+                fingerprint=str(index + 1) * 64,
+            )
+        )
+
+    first = find_candidates(target, limit=3)
+    assert len(first) == 3
+    assert DedupCandidate.objects.filter(
+        record_a=target
+    ).count() == 3
+
+    for candidate in first:
+        candidate.matched_fields = ["stale"]
+        candidate.similarity = "0.7000"
+        candidate.save(update_fields=["matched_fields", "similarity"])
+
+    second = find_candidates(target, limit=3)
+    assert len(second) == 3
+    assert all(candidate.matched_fields == ["city", "name"] for candidate in second)
+    assert all(candidate.similarity == "0.6667" for candidate in second) is False
