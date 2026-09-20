@@ -1,6 +1,8 @@
 import hashlib
 import json
 from decimal import Decimal
+
+from django.db import transaction
 from urllib.parse import urlsplit
 
 
@@ -140,6 +142,7 @@ def _build_values(
     }
 
 
+@transaction.atomic
 def process_records(
     *,
     entity_type,
