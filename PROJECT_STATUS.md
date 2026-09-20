@@ -25,7 +25,7 @@ SOURCE → DISCOVERY → FETCH → PARSE → EXTRACT → NORMALIZE → VALIDATE 
 - P1 branch: cdi-v1-p1-core-data-engine
 - PR #1: Open / Draft / Not Merged
 - PR #1 base: Foundation
-- آخرین head شناخته‌شده PR: f3affe365f1b918b9d237aa1a0ac3d7c97bd5bce
+- آخرین head شناخته‌شده PR: a80761ecc87830ba1ab784b85bc148e1d5c100e5
 - PR mergeable: در آخرین بررسی GitHub، true
 - CI: روی head قبلی 6540ce7 یک شکست مشخص در `makemigrations --check` ثبت شد؛ علت اختلاف نام خودکار indexهای Pharmacy/MarketObservation با migration 0010 بود. این اختلاف در head جدید f3affe3 با تثبیت نام indexها اصلاح شده و CI جدید هنوز نتیجه نهایی ندارد.
 - تغییرات Foundation و Production عمداً انجام نشده‌اند.
@@ -151,8 +151,13 @@ Elasticsearch، Kafka، microservices، ML dedup و browser automation سراس�
 
 ## 🧪 آخرین اصلاح CI — 2026-09-20
 
-CI head `6540ce7` در مرحله `makemigrations --check --dry-run` شکست خورد و Django migration جدید `0011` برای rename شش index پیشنهاد کرد. علت، استفاده از indexهای بدون نام صریح در models در کنار نام‌های تولیدشده داخل migration `0010` بود. در head `f3affe3` نام indexهای مدل با migration موجود تثبیت شد؛ هیچ migration جدیدی عمداً ایجاد نشده است. نتیجه CI این head باید جداگانه مشاهده شود.
+CI head `6540ce7` در مرحله `makemigrations --check --dry-run` شکست خورد و Django migration جدید `0011` برای rename شش index پیشنهاد کرد. علت، استفاده از indexهای بدون نام صریح در models در کنار نام‌های تولیدشده داخل migration `0010` بود. در head `f3affe3` نام indexهای مدل با migration موجود تثبیت شد؛ هیچ migration جدیدی عمداً ایجاد نشده است. نتیجه CI برای headهای جدید هنوز در API مشاهده نشده است و نباید PASS فرض شود.
 
 ## 🏥 به‌روزرسانی فاز Pharmacy
 
 در PR فعال، مدل‌های Pharmacy و MarketObservation، migration 0010 و endpointهای API اضافه شده‌اند. این مرحله بر اساس ساختار واقعی صفحات داروخانه Pillix طراحی شده است. این کد هنوز merge/deploy نشده و acceptance آن باید با migration/CI و crawl واقعی isolated انجام شود.
+
+
+## 2026-09-20 — Structured extraction hardening
+
+در بازبینی عمیق پس از خطای CI، یک ایراد عملکردی مستقل نیز پیدا و اصلاح شد: مسیر `execute_many()` فقط `fields` را به extractor می‌داد و بنابراین `label_table` و `regex_fields` که برای benchmark واقعی Gardasil تعریف شده بودند در اجرای paginated اعمال نمی‌شدند. اصلاح در head `3d047d0` و تست regression در `b398626` انجام شد. head فعلی شاخه P1 پس از مستندسازی `a80761e` است.
