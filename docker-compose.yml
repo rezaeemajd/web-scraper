@@ -35,6 +35,8 @@ services:
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 2 --timeout 120
     ports:
       - "127.0.0.1:8001:8000"
+    volumes:
+      - cdi_exports:/app/exports
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -45,12 +47,14 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
-    command: celery -A config worker --loglevel=INFO --concurrency=1 --prefetch-multiplier=1 --queues=scraping --max-tasks-per-child=50
+    command: celery -A config worker --loglevel=INFO --concurrency=1 --prefetch-multiplier=1 --queues=scraping,exports --max-tasks-per-child=50
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
     networks: [cdi]
     mem_limit: 256m
+    volumes:
+      - cdi_exports:/app/exports
 
   beat:
     build: ./backend
@@ -76,6 +80,7 @@ services:
 volumes:
   cdi_postgres_data:
   cdi_redis_data:
+  cdi_exports:
 
 networks:
   cdi:
