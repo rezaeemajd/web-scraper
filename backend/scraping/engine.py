@@ -266,6 +266,7 @@ def _batched(items, size):
 def execute_many(
     scraper: Scraper,
     *,
+    start_url=None,
     collect_records=True,
     collect_captures=True,
     progress_callback=None,
@@ -276,7 +277,7 @@ def execute_many(
     config = validate_extraction_config(scraper.extraction_config or {})
     max_pages = (config.get("pagination") or {}).get("max_pages", 1)
 
-    current_url = scraper.start_url
+    current_url = start_url or scraper.start_url
     visited = set()
     records = []
     captures = []
