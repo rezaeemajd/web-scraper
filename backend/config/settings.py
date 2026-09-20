@@ -50,6 +50,8 @@ DATABASES = {"default": {
     "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-me"),
     "HOST": os.getenv("POSTGRES_HOST", "db"),
     "PORT": os.getenv("POSTGRES_PORT", "5432"),
+    "CONN_MAX_AGE": int(os.getenv("POSTGRES_CONN_MAX_AGE", "60")),
+    "CONN_HEALTH_CHECKS": True,
 }}
 LANGUAGE_CODE = "fa-ir"
 TIME_ZONE = "Asia/Tehran"
