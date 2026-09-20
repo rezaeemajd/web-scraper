@@ -10,6 +10,7 @@ from sources.models import Source
 
 
 DEFAULT_URL = "https://pillix.ir/medicine/med-mivz"
+DEFAULT_VARIANT_URL = "https://pillix.ir/medicine/med-bhl4"
 DEFAULT_DOMAIN = "pillix.ir"
 DRY_RUN_SENTINEL = object()
 
@@ -19,6 +20,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--url", default=DEFAULT_URL)
+        parser.add_argument("--variant-url", default=DEFAULT_VARIANT_URL,
+                            help="Second real Gardasil 9 variant used for identity/dedup comparison.")
         parser.add_argument("--domain", default=DEFAULT_DOMAIN)
         parser.add_argument("--max-pages", type=int, default=1)
         parser.add_argument(
@@ -30,6 +33,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         url = options["url"]
+        variant_url = options["variant_url"]
         domain = options["domain"]
         max_pages = options["max_pages"]
         persist = options["persist"]
@@ -157,16 +161,25 @@ class Command(BaseCommand):
                 ]
             )
 
-            result = execute_many(
-                scraper,
-                collect_records=True,
-                collect_captures=True,
-            )
-            if len(result) == 2:
-                records, captures = result
-                count = len(records)
-            else:
-                records, captures, count = result
+            records = []
+            captures = []
+            count = 0
+            for target_url in [url, variant_url]:
+                scraper.start_url = target_url
+                scraper.save(update_fields=["start_url"])
+                result = execute_many(
+                    scraper,
+                    collect_records=True,
+                    collect_captures=True,
+                )
+                if len(result) == 2:
+                    page_records, page_captures = result
+                    page_count = len(page_records)
+                else:
+                    page_records, page_captures, page_count = result
+                records.extend(page_records)
+                captures.extend(page_captures)
+                count += page_count
             return source, scraper, records, captures, count
 
         if persist:
@@ -190,6 +203,7 @@ class Command(BaseCommand):
         result = {
             "source": domain,
             "url": url,
+            "variant_url": variant_url,
             "captures": len(captures),
             "records": count,
             "capture_statuses": [capture.status for capture in captures],
@@ -207,6 +221,8 @@ class Command(BaseCommand):
         }
         self.stdout.write(json.dumps(result, ensure_ascii=False, indent=2))
 
+        if len(captures) < 2:
+            raise CommandError("both real Gardasil variant pages must produce captures")
         if not captures:
             raise CommandError("no HTTP capture was produced")
         first = captures[0]
