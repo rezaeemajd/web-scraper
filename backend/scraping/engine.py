@@ -198,7 +198,13 @@ def _batched(items, size):
         yield batch
 
 
-def execute_many(scraper: Scraper, *, collect_records=True):
+def execute_many(
+    scraper: Scraper,
+    *,
+    collect_records=True,
+    collect_captures=True,
+    progress_callback=None,
+):
     if not scraper.entity_type:
         raise ValueError("scraper.entity_type is required")
 
@@ -210,6 +216,7 @@ def execute_many(scraper: Scraper, *, collect_records=True):
     records = []
     captures = []
     record_count = 0
+    pages_fetched = 0
     entity_fields = list(scraper.entity_type.fields.all())
 
     with httpx.Client(
@@ -224,8 +231,11 @@ def execute_many(scraper: Scraper, *, collect_records=True):
             visited.add(current_url)
 
             capture = capture_url(scraper.source, current_url, client=client)
-            captures.append(capture)
+            if collect_captures:
+                captures.append(capture)
             if capture.status != capture.Status.SUCCESS:
+                if progress_callback is not None:
+                    progress_callback(capture, pages_fetched, record_count)
                 break
 
             tree, page_items = _iter_page_items(
@@ -245,6 +255,10 @@ def execute_many(scraper: Scraper, *, collect_records=True):
                 record_count += len(persisted)
                 if collect_records:
                     records.extend(persisted)
+
+            pages_fetched += 1
+            if progress_callback is not None:
+                progress_callback(capture, pages_fetched, record_count)
 
             next_url = _next_page_url_from_tree(config, tree, current_url)
             if not next_url:
