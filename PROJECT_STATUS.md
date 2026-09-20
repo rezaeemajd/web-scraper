@@ -208,3 +208,30 @@ Benchmark بازار باید چندمنبعی باشد. Pillix برای اطل�
 
 ### قاعده پذیرش
 یک URL به‌تنهایی معیار پذیرش CDI نیست؛ پذیرش بازار باید روی چند domain مستقل و Adapterهای متناسب با ساختار هر Source انجام شود.
+
+
+## 2026-09-20 — 12:58 +03:30 — Adapter → Data Pipeline integration
+
+### وضعیت واقعی
+- head پس از این مرحله: ae1205e5e0f5f7e7d5726499022c67cf807e270a
+- خروجی Adapter اکنون به قرارداد `datahub.pipeline.process_records()` متصل شده است.
+- برای extraction عمومی، EntityType/fields حداقلی `product` به‌صورت idempotent ایجاد می‌شوند.
+- `RawCapture` موفق، `source_domain`، URL، evidence و شناسه capture همراه رکورد/observation حفظ می‌شوند.
+- captureهای blocked/error وارد pipeline نمی‌شوند.
+- حالت پیش‌فرض command همچنان rollback کامل دارد؛ `--persist` تنها مسیر commit است.
+- regression test برای provenance و observation اضافه شد.
+- CI برای این head هنوز اجرا/تأیید نشده است؛ بنابراین PASS ادعا نمی‌شود.
+- Production هیچ تغییری نکرده است.
+
+### اصلاح مهم قراردادی
+Adapter output دیگر فقط برای شمارش extraction استفاده نمی‌شود؛ اکنون:
+`Fetch → RawCapture → Adapter → adapter_record_to_item → process_records → ExtractedRecord → RecordObservation`
+
+### محدودیت آگاهانه
+این مرحله هنوز acceptance بازار Gardasil نیست. Adapter عمومی فقط زمانی رکورد Product می‌سازد که evidence ساختاری معتبر داشته باشد. مرحله بعد باید با URLهای واقعی و چند دامنه مستقل، استخراج و semantics هر source را جداگانه اثبات کند.
+
+### گام بعدی مستقیم
+1. CI جدید را فقط یک بار بررسی می‌کنیم.
+2. سپس benchmark واقعی Gardasil چندمنبعی را روی محیط isolated اجرا می‌کنیم.
+3. قیمت/موجودی را observation نگه می‌داریم و مقدار مبهم `0` را قیمت واقعی فرض نمی‌کنیم.
+4. پس از acceptance، Pharmacy/MarketObservation و crawl محدود تهران را به pipeline متصل می‌کنیم.
