@@ -72,9 +72,25 @@ class Command(BaseCommand):
             )
 
             fields = {
-                "product_name": ("نام فرآورده", True),
+                "product_name": ("نام", True),
                 "english_name": ("نام انگلیسی", False),
-                "brand_line": ("برند / محصول", False),
+                "generic_name": ("نام دارو", False),
+                "generic_name_full": ("نام عمومی دارو", False),
+                "generic_name_english": ("نام عمومی دارو به انگلیسی", False),
+                "dosage_form": ("شکل دارویی", False),
+                "route": ("نحوه مصرف", False),
+                "strength": ("قدرت", False),
+                "amount": ("میزان", False),
+                "molecule": ("مولکول", False),
+                "license_holder": ("صاحب پروانه", False),
+                "brand_owner": ("صاحب برند", False),
+                "manufacturer": ("تولیدکننده", False),
+                "manufacturing_country": ("کشور تولیدکننده", False),
+                "license_valid_until": ("تاریخ اعتبار پروانه", False),
+                "consumer_price": ("قیمت مصرف کننده هر بسته", False),
+                "unit_price": ("قیمت واحد", False),
+                "package": ("تعداد در بسته", False),
+                "atc_code": ("کد ATC", False),
             }
             for slug, (name, identifier) in fields.items():
                 EntityField.objects.get_or_create(
@@ -89,10 +105,29 @@ class Command(BaseCommand):
                 )
 
             extraction_config = {
-                "fields": {
-                    "product_name": "h1:nth-of-type(1)",
-                    "english_name": "h1:nth-of-type(2)",
-                    "brand_line": "h1:nth-of-type(3)",
+                "fields": {},
+                "label_table": {
+                    "product_name": ["نام"],
+                    "english_name": ["نام به انگلیسی"],
+                    "generic_name": ["نام دارو"],
+                    "generic_name_full": ["نام عمومی دارو"],
+                    "generic_name_english": ["نام عمومی دارو به انگلیسی"],
+                    "dosage_form": ["شکل دارویی"],
+                    "route": ["نحوه مصرف"],
+                    "strength": ["قدرت"],
+                    "amount": ["میزان"],
+                    "molecule": ["مولکول"],
+                    "license_holder": ["صاحب پروانه"],
+                    "brand_owner": ["صاحب برند"],
+                    "manufacturer": ["تولیدکننده"],
+                    "manufacturing_country": ["کشور تولیدکننده"],
+                    "license_valid_until": ["تاریخ اعتبار پروانه"],
+                    "consumer_price": ["قیمت مصرف کننده هر بسته"],
+                    "unit_price": ["قیمت واحد"],
+                    "package": ["تعداد در بسته"],
+                },
+                "regex_fields": {
+                    "atc_code": {"selector": "body", "pattern": "\\bJ07BM\\d{2}\\b"},
                 },
                 "pagination": {"max_pages": max_pages},
             }
