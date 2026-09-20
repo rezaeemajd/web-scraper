@@ -1,5 +1,7 @@
 from urllib.parse import urljoin
 
+import httpx
+
 from selectolax.lexbor import LexborHTMLParser
 
 from .models import Scraper
