@@ -157,6 +157,7 @@ def run_scraper(self, scraper_id):
                 progress_callback=on_progress,
             )
             _, captures, record_count = _unpack_execute_result(result)
+            run.pages_fetched = max(run.pages_fetched, len(captures))
             run.records_extracted = record_count
             capture = last_capture or (captures[-1] if captures else None)
             if capture is None:
