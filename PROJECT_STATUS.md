@@ -25,7 +25,7 @@ SOURCE → DISCOVERY → FETCH → PARSE → EXTRACT → NORMALIZE → VALIDATE 
 - P1 branch: cdi-v1-p1-core-data-engine
 - PR #1: Open / Draft / Not Merged
 - PR #1 base: Foundation
-- آخرین head شناخته‌شده PR: 3235d3e1103a49c416ea82b8732694457d6f180e
+- آخرین head شناخته‌شده PR: 6c9013e41c52c5283b0a66953e7603c48f7df344
 - PR mergeable: در آخرین بررسی GitHub، true
 - CI: اجرای موفق نهایی برای آخرین head مستند نشده؛ بنابراین PASS نهایی اعلام نمی‌شود.
 - تغییرات Foundation و Production عمداً انجام نشده‌اند.
@@ -60,7 +60,7 @@ SOURCE → DISCOVERY → FETCH → PARSE → EXTRACT → NORMALIZE → VALIDATE 
 | Export | 85% | 15% | 🔄 |
 | Scraper / Celery | 82% | 18% | 🔄 |
 | Gardasil real-market benchmark | 55% | 45% | 🔄 |
-| Pharmacy / Geography | 20% | 80% | ⏳ |
+| Pharmacy / Geography | 30% | 80% | ⏳ |
 | Explorer API | 60% | 40% | 🔄 |
 | RTL UI | 15% | 85% | ⏳ |
 | Isolated Staging | 35% | 65% | 🔄 |
@@ -147,3 +147,8 @@ Elasticsearch، Kafka، microservices، ML dedup و browser automation سراس�
 - bypass CAPTCHA/login/paywall/security
 - داده fake برای acceptance
 - اعلام Done بدون اجرای واقعی
+
+
+## 🏥 به‌روزرسانی فاز Pharmacy
+
+در PR فعال، مدل‌های Pharmacy و MarketObservation، migration 0010 و endpointهای API اضافه شده‌اند. این مرحله بر اساس ساختار واقعی صفحات داروخانه Pillix طراحی شده است. این کد هنوز merge/deploy نشده و acceptance آن باید با migration/CI و crawl واقعی isolated انجام شود.
