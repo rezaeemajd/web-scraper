@@ -75,6 +75,48 @@ def test_execute_runs_capture_extraction_and_record_pipeline(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_execute_many_applies_label_table_and_regex_fields(monkeypatch):
+    from datahub.models import ExtractedRecord, RawCapture
+
+    source = Source.objects.create(
+        name="Structured Source",
+        domain="example.com",
+        base_url="https://example.com",
+        respect_robots=False,
+    )
+    entity = EntityType.objects.create(name="واکسن", slug="vaccine-structured")
+    scraper = Scraper.objects.create(
+        name="Structured scraper",
+        source=source,
+        start_url="https://example.com/vaccine/1",
+        entity_type=entity,
+        extraction_config={
+            "fields": {"title": "h1"},
+            "label_table": {"manufacturer": ["تولیدکننده"]},
+            "regex_fields": {"atc_code": {"selector": "body", "pattern": "\\bJ07BM\\d{2}\\b"}},
+        },
+    )
+    capture = RawCapture(
+        url=scraper.start_url,
+        status_code=200,
+        body="<h1>گارداسیل 9</h1><table><tr><td>تولیدکننده</td><td>MSD</td></tr></table><p>ATC: J07BM03</p>",
+        status=RawCapture.Status.SUCCESS,
+    )
+    monkeypatch.setattr("scraping.engine.capture_url", lambda source, url, *, client=None: capture)
+
+    records, captures = execute_many(scraper)
+
+    assert len(captures) == 1
+    assert len(records) == 1
+    record = ExtractedRecord.objects.get(pk=records[0].pk)
+    assert record.payload["title"] == "گارداسیل 9"
+    assert record.payload["manufacturer"] == "MSD"
+    assert record.payload["atc_code"] == "J07BM03"
+    assert any(item["field"] == "manufacturer" and item["label"] == "تولیدکننده" for item in record.evidence)
+    assert any(item["field"] == "atc_code" and item["pattern"] for item in record.evidence)
+
+
+@pytest.mark.django_db
 def test_run_scraper_records_success(monkeypatch):
     from datahub.models import RawCapture
     from .tasks import run_scraper
