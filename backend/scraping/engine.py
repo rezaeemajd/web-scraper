@@ -84,7 +84,7 @@ def validate_extraction_config(config):
 
 
 def _clean_label(value):
-    return re.sub(r"\\s+", " ", value or "").strip().rstrip(":").strip()
+    return re.sub(r"\s+", " ", value or "").strip().rstrip(":").strip()
 
 
 def _extract_payload(node, fields, label_table=None, regex_fields=None, evidence_prefix=""):
