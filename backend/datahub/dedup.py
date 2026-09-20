@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Value, When
 
 from .models import DedupCandidate, EntityField, ExtractedRecord
 
@@ -54,7 +54,36 @@ def _candidate_queryset(record):
         condition = blocks[0]
         for block in blocks[1:]:
             condition |= block
-        return base.filter(condition).distinct()
+
+        # Rank candidates by how many blocking fields match before Python
+        # similarity scoring. The hard cap prevents a common value such as a
+        # generic clinic name from turning into an unbounded scan.
+        score_terms = []
+        for slug, name in searchable:
+            for key in (slug, name):
+                value = payload.get(key)
+                if value not in (None, ""):
+                    score_terms.append(
+                        Case(
+                            When(
+                                normalized_payload__contains={key: value},
+                                then=Value(1),
+                            ),
+                            default=Value(0),
+                            output_field=IntegerField(),
+                        )
+                    )
+                    break
+
+        block_score = score_terms[0]
+        for term in score_terms[1:]:
+            block_score = block_score + term
+
+        return (
+            base.filter(condition)
+            .annotate(_block_score=block_score)
+            .order_by("-_block_score", "pk")[:1000]
+        )
 
     # Schemas without searchable fields retain the previous complete-scan
     # behavior rather than silently losing candidates.
