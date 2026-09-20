@@ -32,6 +32,16 @@ def test_pipeline_marks_missing_required_field_for_review():
     assert record.quality_score == 0
 
 
+def test_similarity_is_symmetric_for_sparse_market_records():
+    from .dedup import similarity
+    left = {"name": "A", "city": "Tehran"}
+    right = {"name": "A", "city": "Tehran", "phone": "1"}
+    score_left, fields_left = similarity(left, right)
+    score_right, fields_right = similarity(right, left)
+    assert score_left == score_right == Decimal("0.6667")
+    assert fields_left == fields_right == ["city", "name"]
+
+
 @pytest.mark.django_db
 def test_dedup_candidate_is_created_for_high_similarity():
     entity = EntityType.objects.create(name="دارو", slug="drug")
