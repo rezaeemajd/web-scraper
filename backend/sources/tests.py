@@ -56,6 +56,9 @@ class _FakeClient:
     def stream(self, method, url):
         return type(self).responses.pop(0)
 
+    def close(self):
+        return None
+
 
 @pytest.mark.django_db
 def test_capture_url_persists_sha256_and_respects_response_limit(monkeypatch):
