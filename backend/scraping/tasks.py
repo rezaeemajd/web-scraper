@@ -27,6 +27,12 @@ if redis.call("get", KEYS[1]) == ARGV[1] then
 end
 return 0
 """
+_REFRESH_LOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("expire", KEYS[1], ARGV[2])
+end
+return 0
+"""
 
 
 def _recover_stale_run(scraper_id):
@@ -57,6 +63,21 @@ def _scraper_lock(scraper_id):
         client.close()
         raise DuplicateScraperRun("scraper already has an active run")
     return client, key, token
+
+
+def _refresh_scraper_lock(client, key, token):
+    try:
+        refreshed = client.eval(
+            _REFRESH_LOCK_SCRIPT,
+            1,
+            key,
+            token,
+            _LOCK_TTL_SECONDS,
+        )
+        if refreshed != 1:
+            raise DuplicateScraperRun("scraper lock lease was lost")
+    except redis.RedisError as exc:
+        raise RuntimeError("failed to refresh scraper lock lease") from exc
 
 
 def _release_scraper_lock(client, key, token):
@@ -114,6 +135,7 @@ def run_scraper(self, scraper_id):
             def on_progress(capture, pages_fetched, record_count):
                 nonlocal last_capture
                 last_capture = capture
+                _refresh_scraper_lock(client, lock_key, lock_token)
                 run.pages_fetched = pages_fetched
                 run.records_extracted = record_count
                 run.save(update_fields=["pages_fetched", "records_extracted"])
