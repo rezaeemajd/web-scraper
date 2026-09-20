@@ -5,6 +5,7 @@ from celery import shared_task
 from django.db import transaction
 from django.conf import settings
 from django.utils import timezone
+from datetime import timedelta
 
 from .engine import execute_many
 from .models import Scraper, ScraperRun
@@ -18,13 +19,33 @@ class RetryableScraperRun(RuntimeError):
     """Raised when the last fetch failed with a transient network error."""
 
 
-_LOCK_TTL_SECONDS = 2 * 60 * 60
+_LOCK_TTL_SECONDS = 50 * 60
+_STALE_RUN_SECONDS = 50 * 60
 _RELEASE_LOCK_SCRIPT = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
     return redis.call("del", KEYS[1])
 end
 return 0
 """
+
+
+def _recover_stale_run(scraper_id):
+    cutoff = timezone.now() - timedelta(seconds=_STALE_RUN_SECONDS)
+    with transaction.atomic():
+        stale = (
+            ScraperRun.objects
+            .select_for_update()
+            .filter(
+                scraper_id=scraper_id,
+                status=ScraperRun.Status.RUNNING,
+                started_at__lt=cutoff,
+            )
+        )
+        stale.update(
+            status=ScraperRun.Status.FAILED,
+            finished_at=timezone.now(),
+            error_message="worker lease expired; recovered as failed",
+        )
 
 
 def _scraper_lock(scraper_id):
@@ -66,6 +87,7 @@ def run_scraper(self, scraper_id):
     client, lock_key, lock_token = _scraper_lock(scraper_id)
     run = None
     try:
+        _recover_stale_run(scraper_id)
         # Redis is the fast distributed guard. The row lock is the durable
         # second line of defense if a long-running task outlives the Redis TTL.
         with transaction.atomic():
