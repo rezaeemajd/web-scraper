@@ -182,3 +182,13 @@ The migration remains pre-merge and therefore safe to correct in place. New head
 - parser pure و قابل تست است و duplicate cardهای یکسان را حذف می‌کند.
 - تست‌های adapter در `backend/scraping/adapters/test_pillix_pharmacy.py` اضافه شدند.
 - این مرحله هنوز crawl شبکه‌ای یا persistence را فعال نمی‌کند؛ بنابراین ریسک production ندارد. قدم بعدی اتصال adapter به pipeline اجرای scraper و اجرای bounded crawl واقعی در staging است.
+
+
+## 2026-09-20 — Source-first multi-site strategy correction
+
+- The project rule is now explicit: CDI is **source-first and market-wide**, not URL-first. A single Pillix URL is only a parser/benchmark seed, never the market acceptance criterion.
+- Web research identified multiple independent Iranian healthcare information sources with relevant public data surfaces: Pillix, Darooha, DarukhaneYab, Dr-Koja and Boroshor. Current public pages show that these sources cover overlapping but different domains such as drug information, pharmacy directories, physicians/clinics and leaflets; source-specific claims remain provenance-bound.
+- Added `backend/scraping/source_catalog.py` as a curated, extensible source registry. Each source has domain, seed URLs, capabilities and adapter strategy.
+- Added `cdi_source_discovery`, a bounded Safe-Fetch command that probes **multiple independent domains in one run**, honors robots/domain/public-network controls, rate-limits each source and defaults to transactional rollback. `--persist` is explicit.
+- The discovery layer is deliberately separate from parsing: unsupported sites are first captured/proven safe, then receive a dedicated adapter or a validated generic adapter. No site is silently treated as equivalent to Pillix.
+- The next acceptance gate is therefore multi-source: at least several independent domains must be reachable and then produce real ExtractedRecord data through source-specific parsers before the crawler can be considered market-ready.
