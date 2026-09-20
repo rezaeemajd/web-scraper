@@ -236,7 +236,9 @@ def _iter_page_items(config, html, current_url, capture, source_domain):
         for index, node in enumerate(nodes):
             payload, evidence = _extract_payload(
                 node,
-                config["fields"],
+                config.get("fields") or {},
+                label_table=config.get("label_table"),
+                regex_fields=config.get("regex_fields"),
                 evidence_prefix=f"record:{index}" if record_selector else "",
             )
             yield {
