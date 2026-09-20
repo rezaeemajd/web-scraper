@@ -1,10 +1,12 @@
 import json
+from urllib.parse import urlsplit
 
 import httpx
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from datahub.models import EntityField, EntityType
+from datahub.pharmacy_pipeline import upsert_pharmacy_from_record
 from datahub.pipeline import adapter_record_to_item, process_records
 from scraping.adapters.registry import get_adapter
 from scraping.discovery import bounded_discovery
@@ -14,14 +16,26 @@ from sources.models import Source
 
 
 PRODUCT_FIELDS = (
-    ("name", "Name", True),
-    ("brand", "Brand", False),
-    ("sku", "SKU", False),
-    ("price", "Price", False),
-    ("currency", "Currency", False),
-    ("availability", "Availability", False),
-    ("observation_type", "Observation Type", False),
-    ("evidence_type", "Evidence Type", False),
+    ("name", "Name", True, False),
+    ("brand", "Brand", False, False),
+    ("sku", "SKU", False, True),
+    ("price", "Price", False, False),
+    ("currency", "Currency", False, False),
+    ("availability", "Availability", False, False),
+    ("observation_type", "Observation Type", False, False),
+    ("evidence_type", "Evidence Type", False, False),
+)
+
+PHARMACY_FIELDS = (
+    ("name", "Name", True, True),
+    ("province", "Province", True, True),
+    ("city", "City", True, True),
+    ("district", "District", False, False),
+    ("address", "Address", True, True),
+    ("pharmacy_type", "Pharmacy Type", False, False),
+    ("service_hours", "Service Hours", False, False),
+    ("public_phone", "Public Phone", False, False),
+    ("website", "Website", False, False),
 )
 
 
@@ -38,26 +52,43 @@ class Command(BaseCommand):
         parser.add_argument("--max-pages", type=int, default=3)
         parser.add_argument("--max-urls", type=int, default=25)
 
-    def _product_entity(self):
+    def _entity_type(self, kind):
+        if kind == "pharmacy":
+            slug = "pharmacy"
+            name = "Pharmacy"
+            description = "Public pharmacy directory observations extracted from allowed sources."
+            fields = PHARMACY_FIELDS
+        else:
+            slug = "product"
+            name = "Product"
+            description = "Generic product observations extracted from public sources."
+            fields = PRODUCT_FIELDS
+
         entity_type, _ = EntityType.objects.get_or_create(
-            slug="product",
-            defaults={
-                "name": "Product",
-                "description": "Generic product observations extracted from public sources.",
-            },
+            slug=slug,
+            defaults={"name": name, "description": description},
         )
-        for slug, name, required in PRODUCT_FIELDS:
+        for slug, field_name, required, identifier in fields:
             EntityField.objects.get_or_create(
                 entity_type=entity_type,
                 slug=slug,
                 defaults={
-                    "name": name,
+                    "name": field_name,
                     "required": required,
                     "searchable": True,
-                    "is_identifier": slug == "sku",
+                    "is_identifier": identifier,
                 },
             )
         return entity_type
+
+    @staticmethod
+    def _adapter_config(item, url):
+        path = urlsplit(url).path or "/"
+        for route in item.get("adapter_routes", []):
+            prefix = route.get("prefix", "/")
+            if path.startswith(prefix):
+                return route.get("adapter", item["adapter"]), route.get("entity_type", "product")
+        return item["adapter"], "product"
 
     def handle(self, *args, **options):
         selected = options.get("sources")
@@ -96,10 +127,7 @@ class Command(BaseCommand):
                     1, source.rate_limit_per_minute or 10
                 )
                 source.max_response_bytes = min(
-                    max(
-                        64 * 1024,
-                        source.max_response_bytes or 5 * 1024 * 1024,
-                    ),
+                    max(64 * 1024, source.max_response_bytes or 5 * 1024 * 1024),
                     5 * 1024 * 1024,
                 )
                 source.save(update_fields=[
@@ -133,12 +161,11 @@ class Command(BaseCommand):
                         is_success=lambda capture: capture.status == capture.Status.SUCCESS,
                     )
 
-                adapter = get_adapter(item["adapter"])
                 captures = []
                 extracted_records = 0
                 persisted_records = 0
+                materialized_pharmacies = 0
                 extraction_errors = []
-                entity_type = None
 
                 for url, capture in pages:
                     entry = {
@@ -149,15 +176,20 @@ class Command(BaseCommand):
                         "error": capture.error_message,
                         "extracted_records": 0,
                         "persisted_records": 0,
+                        "materialized_pharmacies": 0,
                     }
                     if capture.status == capture.Status.SUCCESS:
                         try:
+                            adapter_name, entity_kind = self._adapter_config(item, url)
+                            adapter = get_adapter(adapter_name)
                             records = adapter(capture.body, url)
+                            entry["adapter"] = adapter_name
+                            entry["entity_type"] = entity_kind
                             entry["extracted_records"] = len(records)
                             extracted_records += len(records)
+
                             if records:
-                                if entity_type is None:
-                                    entity_type = self._product_entity()
+                                entity_type = self._entity_type(entity_kind)
                                 items = [
                                     adapter_record_to_item(
                                         record,
@@ -173,6 +205,12 @@ class Command(BaseCommand):
                                 )
                                 entry["persisted_records"] = len(persisted)
                                 persisted_records += len(persisted)
+
+                                if entity_kind == "pharmacy":
+                                    for record in persisted:
+                                        upsert_pharmacy_from_record(record)
+                                    entry["materialized_pharmacies"] = len(persisted)
+                                    materialized_pharmacies += len(persisted)
                         except Exception as exc:
                             entry["extraction_error"] = str(exc)[:500]
                             extraction_errors.append({
@@ -189,6 +227,7 @@ class Command(BaseCommand):
                     "pages_discovered_and_fetched": len(pages),
                     "records_extracted": extracted_records,
                     "records_persisted": persisted_records,
+                    "pharmacies_materialized": materialized_pharmacies,
                     "extraction_errors": extraction_errors,
                     "captures": captures,
                 })
